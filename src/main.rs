@@ -7,10 +7,9 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 const PCC_IGNORE_FILE: &str = ".pcc_ignore";
-const GIT_IGNORE_FILE: &str = ".gitignore";
 
 fn run(project_dir: &Path, args: &[String]) -> io::Result<()> {
-    let ignore_patterns = get_ignore_patterns(project_dir)?;
+    let ignore_patterns = get_ignore_patterns(project_dir, args)?;
     let combined_source_code = walk_and_combine(project_dir, &ignore_patterns)?;
 
     // クリップボードにコピーするかどうかを判断
@@ -23,11 +22,23 @@ fn run(project_dir: &Path, args: &[String]) -> io::Result<()> {
     Ok(())
 }
 
-fn get_ignore_patterns(project_dir: &Path) -> io::Result<String> {
-    let ignore_path = if project_dir.join(PCC_IGNORE_FILE).exists() {
+fn get_ignore_patterns(project_dir: &Path, args: &[String]) -> io::Result<String> {
+    let ignore_file_path = args.iter().find_map(|arg| {
+        if arg.starts_with("--ignore_file_path=") {
+            Some(PathBuf::from(
+                arg.strip_prefix("--ignore_file_path=").unwrap(),
+            ))
+        } else {
+            None
+        }
+    });
+
+    let ignore_path = if let Some(path) = ignore_file_path {
+        path
+    } else if project_dir.join(PCC_IGNORE_FILE).exists() {
         project_dir.join(PCC_IGNORE_FILE)
     } else {
-        project_dir.join(GIT_IGNORE_FILE)
+        return Ok(String::new()); // デフォルトの無視ファイルがない場合は空の文字列を返す
     };
     fs::read_to_string(ignore_path)
 }
@@ -104,7 +115,7 @@ fn copy_to_clipboard(combined_code: String) {
 }
 
 fn save_to_file(combined_code: String) {
-    let current_dir = std::env::current_dir().expect("Failed to get current directory");
+    let current_dir = env::current_dir().expect("Failed to get current directory");
     let output_file: PathBuf = current_dir.join("combined_code.txt");
     write_combined_code(&output_file, &combined_code)
         .expect("Failed to write combined code to file");
