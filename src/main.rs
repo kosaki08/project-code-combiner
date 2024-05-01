@@ -5,37 +5,47 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+const PC_IGNORE_FILE: &str = ".pcc_ignore";
+const GIT_IGNORE_FILE: &str = ".gitignore";
+
+fn get_ignore_patterns(project_dir: &Path) -> io::Result<String> {
+    let pc_ignore_path = project_dir.join(PC_IGNORE_FILE);
+    if pc_ignore_path.exists() {
+        fs::read_to_string(pc_ignore_path)
+    } else {
+        let gitignore_path = project_dir.join(GIT_IGNORE_FILE);
+        fs::read_to_string(gitignore_path)
+    }
+}
+
 fn combine_source_code(project_dir: &Path, output_file: &Path) -> io::Result<()> {
-    // .gitignoreファイルを読み込み、無視するパターンを取得
-    let gitignore_path = project_dir.join(".pc_ignore");
-    let gitignore_patterns = fs::read_to_string(gitignore_path)?;
+    let ignore_patterns = get_ignore_patterns(project_dir)?;
+    let combined_source_code = walk_and_combine(project_dir, &ignore_patterns)?;
+    write_combined_code(output_file, &combined_source_code)?;
+    Ok(())
+}
 
-    // 結合したソースコードを格納する変数
+fn walk_and_combine(project_dir: &Path, ignore_patterns: &str) -> io::Result<String> {
     let mut combined_source_code = String::new();
-
-    // プロジェクトのディレクトリを再帰的に走査
     for result in Walk::new(project_dir) {
         match result {
             Ok(entry) => {
                 let path = entry.path();
-                if path.is_file() {
-                    // .gitignoreで指定されているパターンに一致しないファイルを処理
-                    if !is_ignored(path, project_dir, &gitignore_patterns) {
-                        // ファイルの内容を読み込んで結合
-                        let file_content = fs::read_to_string(path)?;
-                        combined_source_code.push_str(&file_content);
-                        combined_source_code.push('\n');
-                    }
+                if path.is_file() && !is_ignored(path, project_dir, ignore_patterns) {
+                    let file_content = fs::read_to_string(path)?;
+                    combined_source_code.push_str(&file_content);
+                    combined_source_code.push('\n');
                 }
             }
             Err(err) => println!("Error: {}", err),
         }
     }
+    Ok(combined_source_code)
+}
 
-    // 結合したソースコードを新しいファイルに書き込む
+fn write_combined_code(output_file: &Path, combined_source_code: &str) -> io::Result<()> {
     let mut output_file = fs::File::create(output_file)?;
     output_file.write_all(combined_source_code.as_bytes())?;
-
     Ok(())
 }
 
