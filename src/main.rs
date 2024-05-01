@@ -45,7 +45,6 @@ fn run(project_dir: &Path, args: &[String]) -> io::Result<()> {
     let config = load_config()?;
     let ignore_patterns = get_ignore_patterns(args, &config.ignore.patterns)?;
     let combined_source_code = walk_and_combine(project_dir, &ignore_patterns)?;
-
     let action: String = get_action(args, &config);
 
     match &action[..] {
@@ -81,16 +80,17 @@ fn load_config() -> io::Result<Config> {
     let home_dir = env::var("HOME").unwrap_or_else(|_| env::var("USERPROFILE").unwrap());
     let config_path = PathBuf::from(home_dir).join(".pcc_config.toml");
 
-    if config_path.exists() {
-        let config_str = fs::read_to_string(config_path)?;
-        let config: Result<Config, _> = toml::from_str(&config_str);
-        config.map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
-    } else {
-        Err(io::Error::new(
+    if !config_path.exists() {
+        return Err(io::Error::new(
             io::ErrorKind::NotFound,
             "Config file not found",
-        ))
+        ));
     }
+
+    let config_str = fs::read_to_string(config_path)?;
+    let config: Result<Config, _> = toml::from_str(&config_str);
+
+    config.map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
 
 fn get_ignore_patterns(args: &[String], ignore_patters_config: &Vec<String>) -> io::Result<String> {
@@ -134,6 +134,7 @@ fn walk_and_combine(project_dir: &Path, ignore_patterns: &str) -> io::Result<Str
 fn write_combined_code(output_file: &Path, combined_source_code: &str) -> io::Result<()> {
     let mut output_file = fs::File::create(output_file)?;
     output_file.write_all(combined_source_code.as_bytes())?;
+
     Ok(())
 }
 
@@ -187,33 +188,31 @@ fn save_to_file(combined_code: String, output_path: &Path) {
 }
 
 fn get_output_path(args: &[String], default_output_path: &str) -> PathBuf {
-    if let Some(path) = args
+    let path = args
         .iter()
         .find_map(|arg| arg.strip_prefix("--output_path="))
-    {
-        expand_tilde(path)
-    } else {
-        expand_tilde(default_output_path)
-    }
+        .unwrap_or(default_output_path);
+
+    expand_tilde(path)
 }
 
 fn expand_tilde(path: &str) -> PathBuf {
-    if let Some(home_dir) = path.strip_prefix("~").and_then(|_| {
-        env::var("HOME")
-            .ok()
-            .or_else(|| env::var("USERPROFILE").ok())
-    }) {
-        let path = Path::new(path);
-        if let Ok(stripped_path) = path.strip_prefix("~/") {
-            let mut expanded_path = PathBuf::from(home_dir);
-            expanded_path.push(stripped_path);
-            expanded_path
-        } else {
-            PathBuf::from(path)
-        }
-    } else {
-        PathBuf::from(path)
+    if !path.starts_with('~') {
+        return PathBuf::from(path);
     }
+
+    let home_dir = env::var("HOME")
+        .ok()
+        .or_else(|| env::var("USERPROFILE").ok())
+        .expect("Failed to get home directory");
+
+    if let Some(stripped_path) = path.strip_prefix("~/") {
+        let mut expanded_path = PathBuf::from(home_dir);
+        expanded_path.push(stripped_path);
+        return expanded_path;
+    }
+
+    PathBuf::from(path)
 }
 
 fn main() {
