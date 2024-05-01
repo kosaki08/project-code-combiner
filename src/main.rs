@@ -24,6 +24,23 @@ struct Config {
     ignore: Ignore,
 }
 
+fn print_help() {
+    println!("Usage: project_code_combinator [OPTIONS] <PROJECT_DIRECTORY>");
+    println!();
+    println!("Options:");
+    println!("  --clipboard                 Copy the combined code to the clipboard");
+    println!("  --save                      Save the combined code to a file");
+    println!("  --output_path=<PATH>        Specify the output file path");
+    println!("  --ignore_file_path=<PATH>   Specify the ignore file path in .gitignore format");
+    println!("  --help                      Show this help message");
+    println!("  --version                   Show version information");
+}
+
+fn print_version() {
+    let version = option_env!("CARGO_PKG_VERSION").unwrap_or("unknown");
+    println!("Project Code Combinator v{}", version);
+}
+
 fn run(project_dir: &Path, args: &[String]) -> io::Result<()> {
     let config = load_config()?;
     let ignore_patterns = get_ignore_patterns(args, &config.ignore.patterns)?;
@@ -200,16 +217,28 @@ fn expand_tilde(path: &str) -> PathBuf {
 }
 
 fn main() {
-    // コマンドライン引数からプロジェクトディレクトリを取得
+    let args: Vec<String> = env::args().collect();
+
+    if args.contains(&String::from("--help")) {
+        print_help();
+        std::process::exit(0);
+    }
+
+    if args.contains(&String::from("--version")) {
+        print_version();
+        std::process::exit(0);
+    }
+
+    // コマンドライン引数から対象のディレクトリを取得
     let project_directory = match env::args().nth(1) {
         Some(dir) => PathBuf::from(dir),
         None => {
-            eprintln!("Usage: {} <project_directory>", env::args().next().unwrap());
+            eprintln!("Error: Project directory not specified.");
+            print_help();
             std::process::exit(1);
         }
     };
 
-    let args: Vec<String> = env::args().collect();
     match run(&project_directory, &args) {
         Ok(_) => println!("Source code combined successfully."),
         Err(err) => eprintln!("Error: {}", err),
