@@ -24,24 +24,20 @@ fn run(project_dir: &Path, args: &[String]) -> io::Result<()> {
 }
 
 fn get_ignore_patterns(project_dir: &Path, args: &[String]) -> io::Result<String> {
-    let ignore_file_path = args.iter().find_map(|arg| {
-        if arg.starts_with("--ignore_file_path=") {
-            Some(PathBuf::from(
-                arg.strip_prefix("--ignore_file_path=").unwrap(),
-            ))
-        } else {
-            None
-        }
-    });
+    let ignore_file_path = args
+        .iter()
+        .find_map(|arg| arg.strip_prefix("--ignore_file_path=").map(expand_tilde));
 
-    let ignore_path = if let Some(path) = ignore_file_path {
-        path
-    } else if project_dir.join(PCC_IGNORE_FILE).exists() {
-        project_dir.join(PCC_IGNORE_FILE)
-    } else {
-        return Ok(String::new()); // デフォルトの無視ファイルがない場合は空の文字列を返す
-    };
-    fs::read_to_string(ignore_path)
+    if let Some(path) = ignore_file_path {
+        return fs::read_to_string(path);
+    }
+
+    let default_ignore_path = project_dir.join(PCC_IGNORE_FILE);
+    if default_ignore_path.exists() {
+        return fs::read_to_string(default_ignore_path);
+    }
+
+    Ok(String::new())
 }
 
 fn walk_and_combine(project_dir: &Path, ignore_patterns: &str) -> io::Result<String> {
@@ -123,17 +119,30 @@ fn save_to_file(combined_code: String, output_path: &Path) {
 
 fn get_output_path(args: &[String]) -> PathBuf {
     args.iter()
-        .find_map(|arg| {
-            if arg.starts_with("--output_path=") {
-                Some(PathBuf::from(arg.strip_prefix("--output_path=").unwrap()))
-            } else {
-                None
-            }
-        })
+        .find_map(|arg| arg.strip_prefix("--output_path=").map(PathBuf::from))
         .unwrap_or_else(|| {
             let current_dir = env::current_dir().expect("Failed to get current directory");
             current_dir.join("combined_code.txt")
         })
+}
+
+fn expand_tilde(path: &str) -> PathBuf {
+    if let Some(home_dir) = path.strip_prefix("~").and_then(|_| {
+        env::var("HOME")
+            .ok()
+            .or_else(|| env::var("USERPROFILE").ok())
+    }) {
+        let path = Path::new(path);
+        if let Ok(stripped_path) = path.strip_prefix("~/") {
+            let mut expanded_path = PathBuf::from(home_dir);
+            expanded_path.push(stripped_path);
+            expanded_path
+        } else {
+            PathBuf::from(path)
+        }
+    } else {
+        PathBuf::from(path)
+    }
 }
 
 fn main() {
