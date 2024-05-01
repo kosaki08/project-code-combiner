@@ -1,3 +1,4 @@
+use clipboard::{ClipboardContext, ClipboardProvider};
 use ignore::Walk;
 use regex::Regex;
 use std::env;
@@ -105,4 +106,14 @@ fn main() {
     let current_dir = std::env::current_dir().expect("Failed to get current directory");
     let output_file = current_dir.join("combined_code.txt");
     combine_source_code(&project_directory, &output_file).expect("Failed to combine source code");
+
+    // クリップボードにコピーするかどうかを判断
+    let args: Vec<String> = env::args().collect();
+    if args.contains(&String::from("--clipboard")) {
+        let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
+        let combined_code = fs::read_to_string(&output_file).expect("Failed to read combined code");
+        ctx.set_contents(combined_code)
+            .expect("Failed to copy to clipboard");
+        println!("Combined code copied to clipboard.");
+    }
 }
