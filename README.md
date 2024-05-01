@@ -15,6 +15,7 @@ Here are the available command line options for customizing the execution:
 | Option                                     | Description                                                                                                                                |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `--clipboard`                              | Copies the combined source code to the clipboard instead of saving it to a file.                                                           |
+| `--output_path`                            | Specify the output directory of the combined source code.                                                                                  |
 | `--ignore_file_path=<path/to/ignore/file>` | Specifies a custom path to an ignore file, which is used to exclude files from being combined. Defaults to `.pcc_ignore` if not specified. |
 
 ## Examples
@@ -34,6 +35,14 @@ $ cargo run /path/to/project
 ```
 
 This command processes the files and copies the combined source code directly to the clipboard, without saving it to a file.
+
+### Using Custom Output Path:
+
+```
+$ cargo run /path/to/project --output_path=/path/to/output/file
+```
+
+This command processes the files and saves the combined source code to the specified output file path.
 
 ### Using Custom Ignore File:
 

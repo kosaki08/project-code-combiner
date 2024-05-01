@@ -16,7 +16,8 @@ fn run(project_dir: &Path, args: &[String]) -> io::Result<()> {
     if args.contains(&String::from("--clipboard")) {
         copy_to_clipboard(combined_source_code);
     } else {
-        save_to_file(combined_source_code);
+        let output_path = get_output_path(args);
+        save_to_file(combined_source_code, &output_path);
     }
 
     Ok(())
@@ -114,12 +115,25 @@ fn copy_to_clipboard(combined_code: String) {
     println!("Combined code copied to clipboard.");
 }
 
-fn save_to_file(combined_code: String) {
-    let current_dir = env::current_dir().expect("Failed to get current directory");
-    let output_file: PathBuf = current_dir.join("combined_code.txt");
-    write_combined_code(&output_file, &combined_code)
+fn save_to_file(combined_code: String, output_path: &Path) {
+    write_combined_code(output_path, &combined_code)
         .expect("Failed to write combined code to file");
-    println!("Combined code saved to file: {}", output_file.display());
+    println!("Combined code saved to file: {}", output_path.display());
+}
+
+fn get_output_path(args: &[String]) -> PathBuf {
+    args.iter()
+        .find_map(|arg| {
+            if arg.starts_with("--output_path=") {
+                Some(PathBuf::from(arg.strip_prefix("--output_path=").unwrap()))
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| {
+            let current_dir = env::current_dir().expect("Failed to get current directory");
+            current_dir.join("combined_code.txt")
+        })
 }
 
 fn main() {
