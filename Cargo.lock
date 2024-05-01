@@ -160,21 +160,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "pcc"
+version = "0.1.0"
+dependencies = [
+ "clipboard",
+ "ignore",
+ "regex",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.81"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d1597b0c024618f09a9c3b8655b7e430397a36d23fdafec26d6965e9eec3eba"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "project-code-combinator"
-version = "0.1.0"
-dependencies = [
- "clipboard",
- "ignore",
- "regex",
 ]
 
 [[package]]
