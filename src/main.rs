@@ -33,6 +33,13 @@ fn walk_and_combine(project_dir: &Path, ignore_patterns: &str) -> io::Result<Str
                 let path = entry.path();
                 if path.is_file() && !is_ignored(path, project_dir, ignore_patterns) {
                     let file_content = fs::read_to_string(path)?;
+                    let relative_path = path.strip_prefix(project_dir).unwrap();
+                    combined_source_code.push_str(&format!(
+                        "{}\n{}\n{}\n",
+                        "*".repeat(30),
+                        relative_path.display(),
+                        "*".repeat(30)
+                    ));
                     combined_source_code.push_str(&file_content);
                     combined_source_code.push('\n');
                 }
