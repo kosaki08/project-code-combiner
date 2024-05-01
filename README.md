@@ -2,7 +2,7 @@
 
 To combine files, use the following command in your terminal:
 
-```
+```bash
 $ cargo run <project_directory>
 ```
 
@@ -22,7 +22,7 @@ Here are the available command line options for customizing the execution:
 
 ### Basic Usage:
 
-```
+```bash
 $ cargo run /path/to/project
 ```
 
@@ -30,7 +30,7 @@ This command processes the files in the specified project directory, saving the 
 
 ### Using Clipboard:
 
-```
+```bash
 $ cargo run /path/to/project
 ```
 
@@ -38,7 +38,7 @@ This command processes the files and copies the combined source code directly to
 
 ### Using Custom Output Path:
 
-```
+```bash
 $ cargo run /path/to/project --output_path=/path/to/output/file
 ```
 
@@ -46,7 +46,7 @@ This command processes the files and saves the combined source code to the speci
 
 ### Using Custom Ignore File:
 
-```
+```bash
 $ cargo run /path/to/project --ignore_file_path=/path/to/custom/ignore.file
 ```
 
@@ -55,3 +55,51 @@ This allows you to use a custom ignore file instead of .pcc_ignore.
 ## Format of the Ignore File
 
 Configuration file can be written in .gitignore format. Place the configuration file `.pcc_ignore` in the project root or specify a custom path using the `--ignore_file_path` option.
+
+## Global Installation
+
+After building, you can install the binary globally to make it accessible from any location on your system:
+
+### For Linux and macOS:
+
+1. **Copy the Binary**:
+
+   Copy the binary to a directory included in your system's PATH, such as `/usr/local/bin`:
+
+   ```bash
+   sudo cp ./target/release/project-code-combinator /usr/local/bin/
+   ```
+
+2. **Set Execute Permissions (if necessary)**:
+
+   Ensure that the binary is executable:
+
+   ```bash
+   sudo chmod +rx /usr/local/bin/project-code-combinator
+   ```
+
+3. **Verify Installation**:
+
+   Test the installation by running the command from any location:
+
+   ```bash
+   project-code-combinator <options>
+   ```
+
+**Building**:
+
+To build the binary, run the following command:
+
+```bash
+cargo build --release
+```
+
+## Uninstall
+
+### For Linux and macOS:
+
+To uninstall the binary, simply remove it from the directory where it was copied:
+
+```bash
+sudo rm /usr/local/bin/project-code-combinator
+```
