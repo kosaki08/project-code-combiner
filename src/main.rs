@@ -1,29 +1,82 @@
 use clipboard::{ClipboardContext, ClipboardProvider};
 use ignore::Walk;
 use regex::Regex;
+use serde::Deserialize;
 use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-const PCC_IGNORE_FILE: &str = ".pcc_ignore";
+#[derive(Debug, Deserialize)]
+struct Default {
+    action: String,
+    output_path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct Ignore {
+    patterns: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Config {
+    default: Default,
+    ignore: Ignore,
+}
 
 fn run(project_dir: &Path, args: &[String]) -> io::Result<()> {
-    let ignore_patterns = get_ignore_patterns(project_dir, args)?;
+    let config = load_config()?;
+    let ignore_patterns = get_ignore_patterns(args, &config.ignore.patterns)?;
     let combined_source_code = walk_and_combine(project_dir, &ignore_patterns)?;
 
-    // クリップボードにコピーするかどうかを判断
-    if args.contains(&String::from("--clipboard")) {
-        copy_to_clipboard(combined_source_code);
-    } else {
-        let output_path = get_output_path(args);
-        save_to_file(combined_source_code, &output_path);
+    let action: String = get_action(args, &config);
+
+    match &action[..] {
+        "copy" => {
+            copy_to_clipboard(combined_source_code);
+        }
+        "save" => {
+            let output_path = get_output_path(args, &config.default.output_path);
+            save_to_file(combined_source_code, &output_path);
+        }
+        _ => {
+            eprintln!("Unknown action: {}", action);
+            std::process::exit(1);
+        }
     }
 
     Ok(())
 }
 
-fn get_ignore_patterns(project_dir: &Path, args: &[String]) -> io::Result<String> {
+fn get_action(args: &[String], config: &Config) -> String {
+    if args.contains(&String::from("--clipboard")) {
+        return String::from("copy");
+    }
+
+    if args.contains(&String::from("--save")) {
+        return String::from("save");
+    }
+
+    config.default.action.clone()
+}
+
+fn load_config() -> io::Result<Config> {
+    let home_dir = env::var("HOME").unwrap_or_else(|_| env::var("USERPROFILE").unwrap());
+    let config_path = PathBuf::from(home_dir).join(".pcc_config.toml");
+
+    if config_path.exists() {
+        let config_str = fs::read_to_string(config_path)?;
+        let config: Result<Config, _> = toml::from_str(&config_str);
+        config.map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "Config file not found",
+        ))
+    }
+}
+
+fn get_ignore_patterns(args: &[String], ignore_patters_config: &Vec<String>) -> io::Result<String> {
     let ignore_file_path = args
         .iter()
         .find_map(|arg| arg.strip_prefix("--ignore_file_path=").map(expand_tilde));
@@ -32,9 +85,8 @@ fn get_ignore_patterns(project_dir: &Path, args: &[String]) -> io::Result<String
         return fs::read_to_string(path);
     }
 
-    let default_ignore_path = project_dir.join(PCC_IGNORE_FILE);
-    if default_ignore_path.exists() {
-        return fs::read_to_string(default_ignore_path);
+    if !ignore_patters_config.is_empty() {
+        return Ok(ignore_patters_config.join("\n"));
     }
 
     Ok(String::new())
@@ -117,13 +169,15 @@ fn save_to_file(combined_code: String, output_path: &Path) {
     println!("Combined code saved to file: {}", output_path.display());
 }
 
-fn get_output_path(args: &[String]) -> PathBuf {
-    args.iter()
-        .find_map(|arg| arg.strip_prefix("--output_path=").map(PathBuf::from))
-        .unwrap_or_else(|| {
-            let current_dir = env::current_dir().expect("Failed to get current directory");
-            current_dir.join("combined_code.txt")
-        })
+fn get_output_path(args: &[String], default_output_path: &str) -> PathBuf {
+    if let Some(path) = args
+        .iter()
+        .find_map(|arg| arg.strip_prefix("--output_path="))
+    {
+        expand_tilde(path)
+    } else {
+        expand_tilde(default_output_path)
+    }
 }
 
 fn expand_tilde(path: &str) -> PathBuf {
