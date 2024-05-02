@@ -1,3 +1,7 @@
+# Project Code Combiner
+
+Project Code Combiner (PCC) is a command-line tool that combines source code files in a project directory into a single file or copy to clipboard. This tool is useful for combining multiple files into a single file for asking questions to AI models or sharing code snippets.
+
 ## Usage
 
 To combine files, use the following command in your terminal:
@@ -6,17 +10,21 @@ To combine files, use the following command in your terminal:
 $ cargo run <project_directory>
 ```
 
-You can also include options to customize the behavior of the application as described below.
+You can also include options to override the behavior of the application as described below.
+You can include options to override the default behavior specified in the configuration file `.pcc_config.toml`.
 
 ### Optinos
 
 Here are the available command line options for customizing the execution:
 
-| Option                                     | Description                                                                                                                                |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `--clipboard`                              | Copies the combined source code to the clipboard instead of saving it to a file.                                                           |
-| `--output_path`                            | Specify the output directory of the combined source code.                                                                                  |
-| `--ignore_file_path=<path/to/ignore/file>` | Specifies a custom path to an ignore file, which is used to exclude files from being combined. Defaults to `.pcc_ignore` if not specified. |
+| Option                                     | Description                                                                                         |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `--copy`                                   | Copies the combined source code to the clipboard instead of saving it to a file.                    |
+| `--save`                                   | Save the combined source code to the fiile. File output destinations can override default settings. |
+| `--output_path`                            | Specify the output directory of the combined source code.                                           |
+| `--ignore_file_path=<path/to/ignore/file>` | Specify a custom path to an ignored file written in `.gitignore` file format.                       |
+| `--help`                                   | Display the help message.                                                                           |
+| `--version`                                | Display the version of the script.                                                                  |
 
 ## Examples
 
@@ -26,15 +34,23 @@ Here are the available command line options for customizing the execution:
 $ cargo run /path/to/project
 ```
 
-This command processes the files in the specified project directory, saving the combined source code to a file in the project directory.
+This command processes the files in the specified project directory, perform the default actions (copy to clipboard or save to file) listed in the configuration file `.pcc_config.toml`. Override the default action if the following options are given
 
 ### Using Clipboard:
 
 ```bash
-$ cargo run /path/to/project
+$ cargo run /path/to/project --copy
 ```
 
 This command processes the files and copies the combined source code directly to the clipboard, without saving it to a file.
+
+### Using Save to File:
+
+```bash
+$ cargo run /path/to/project --save
+```
+
+This command processes the files and saves the combined source code to the default output file path specified in the configuration file.
 
 ### Using Custom Output Path:
 
@@ -58,16 +74,17 @@ Configuration file can be written in .gitignore format. Place the configuration 
 
 ## Global Installation
 
-After building, you can install the binary globally to make it accessible from any location on your system:
+You can install the binary globally to make it accessible from any location on your system:
 
 ### For Linux and macOS:
 
-1. **Copy the Binary**:
+1. **Copy files**:
 
-   Copy the binary to a directory included in your system's PATH, such as `/usr/local/bin`:
+   Copy the binary to a directory included in your system's PATH, such as `/usr/local/bin` and copy the configuration file to your home directory:
 
    ```bash
-   sudo cp ./target/release/project-code-combinator /usr/local/bin/
+   sudo cp ./target/release/pcc /usr/local/bin/
+   sudo cp ./pcc_config.example.toml ~/.pcc_config.toml
    ```
 
 2. **Set Execute Permissions (if necessary)**:
@@ -75,7 +92,7 @@ After building, you can install the binary globally to make it accessible from a
    Ensure that the binary is executable:
 
    ```bash
-   sudo chmod +rx /usr/local/bin/project-code-combinator
+   sudo chmod +x /usr/local/bin/pcc
    ```
 
 3. **Verify Installation**:
@@ -83,16 +100,8 @@ After building, you can install the binary globally to make it accessible from a
    Test the installation by running the command from any location:
 
    ```bash
-   project-code-combinator <options>
+   pcc <options>
    ```
-
-**Building**:
-
-To build the binary, run the following command:
-
-```bash
-cargo build --release
-```
 
 ## Uninstall
 
@@ -101,5 +110,20 @@ cargo build --release
 To uninstall the binary, simply remove it from the directory where it was copied:
 
 ```bash
-sudo rm /usr/local/bin/project-code-combinator
+sudo rm /usr/local/bin/pcc
+sudo rm ~/.pcc_config.toml
 ```
+
+## Development
+
+### Build the Binary
+
+To build the binary, run the following command:
+
+```bash
+cargo build --release
+```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
