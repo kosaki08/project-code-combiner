@@ -9,13 +9,13 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Deserialize)]
 struct Default {
-    action: String,
-    output_path: String,
+    action: Option<String>,
+    output_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Ignore {
-    patterns: Vec<String>,
+    patterns: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -43,34 +43,38 @@ fn print_version() {
 
 fn run(project_dir: &Path, args: &[String]) -> io::Result<()> {
     let config = load_config()?;
-    let ignore_patterns = get_ignore_patterns(args, &config.ignore.patterns)?;
+    let ignore_patterns = get_ignore_patterns(&config.ignore.patterns)?;
     let combined_source_code = walk_and_combine(project_dir, &ignore_patterns)?;
-    let action: String = get_action(args, &config);
 
-    match &action[..] {
-        "copy" => {
-            copy_to_clipboard(combined_source_code);
+    if let Some(action) = get_action(args, &config) {
+        match action.as_str() {
+            "copy" => {
+                copy_to_clipboard(combined_source_code);
+            }
+            "save" => {
+                let output_path = get_output_path(args, &config.default.output_path);
+                save_to_file(combined_source_code, &output_path);
+            }
+            _ => {
+                eprintln!("Unknown action: {}", action);
+                std::process::exit(1);
+            }
         }
-        "save" => {
-            let output_path = get_output_path(args, &config.default.output_path);
-            save_to_file(combined_source_code, &output_path);
-        }
-        _ => {
-            eprintln!("Unknown action: {}", action);
-            std::process::exit(1);
-        }
+    } else {
+        eprintln!("No action specified");
+        std::process::exit(1);
     }
 
     Ok(())
 }
 
-fn get_action(args: &[String], config: &Config) -> String {
+fn get_action(args: &[String], config: &Config) -> Option<String> {
     if args.contains(&String::from("--clipboard")) {
-        return String::from("copy");
+        return Some("copy".to_string());
     }
 
     if args.contains(&String::from("--save")) {
-        return String::from("save");
+        return Some("save".to_string());
     }
 
     config.default.action.clone()
@@ -93,17 +97,11 @@ fn load_config() -> io::Result<Config> {
     config.map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
 
-fn get_ignore_patterns(args: &[String], ignore_patters_config: &Vec<String>) -> io::Result<String> {
-    let ignore_file_path = args
-        .iter()
-        .find_map(|arg| arg.strip_prefix("--ignore_file_path=").map(expand_tilde));
-
-    if let Some(path) = ignore_file_path {
-        return fs::read_to_string(path);
-    }
-
-    if !ignore_patters_config.is_empty() {
-        return Ok(ignore_patters_config.join("\n"));
+fn get_ignore_patterns(ignore_patters_config: &Option<Vec<String>>) -> io::Result<String> {
+    if let Some(patterns) = ignore_patters_config {
+        if !patterns.is_empty() {
+            return Ok(patterns.join("\n"));
+        }
     }
 
     Ok(String::new())
@@ -187,13 +185,18 @@ fn save_to_file(combined_code: String, output_path: &Path) {
     println!("Combined code saved to file: {}", output_path.display());
 }
 
-fn get_output_path(args: &[String], default_output_path: &str) -> PathBuf {
-    let path = args
+fn get_output_path(args: &[String], default_output_path: &Option<String>) -> PathBuf {
+    if let Some(path) = args
         .iter()
         .find_map(|arg| arg.strip_prefix("--output_path="))
-        .unwrap_or(default_output_path);
-
-    expand_tilde(path)
+    {
+        expand_tilde(path)
+    } else if let Some(path) = default_output_path {
+        expand_tilde(path)
+    } else {
+        let current_dir = env::current_dir().expect("Failed to get current directory");
+        current_dir.join("combined_code.txt")
+    }
 }
 
 fn expand_tilde(path: &str) -> PathBuf {
