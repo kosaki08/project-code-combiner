@@ -1,19 +1,15 @@
 [default]
 action = "copy"
 output_path = "~/Desktop/Projects/your-project/dist/combined.txt"
-
-[ignore]
-patterns = [
+ignore_patterns = [
   ".DS_Store",
-  ".ipynb_checkpoints/",
-  "node_modules",
-  "**pycache**",
-  "untracked/",
-  "dist/",
-  "target/",
   ".env",
   ".ipynb",
   ".lock",
+  ".ipynb_checkpoints/",
+  "node_modules/",
+  "**pycache**",
+  "dist/",
+  "target/",
   "constants.py",
-  "constants.rs",
 ]

@@ -11,17 +11,12 @@ use std::path::{Path, PathBuf};
 struct Default {
     action: Option<String>,
     output_path: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct Ignore {
-    patterns: Option<Vec<String>>,
+    ignore_patterns: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Config {
     default: Default,
-    ignore: Ignore,
 }
 
 fn print_help() {
@@ -43,7 +38,7 @@ fn print_version() {
 
 fn run(project_dir: &Path, args: &[String]) -> io::Result<()> {
     let config = load_config()?;
-    let ignore_patterns = get_ignore_patterns(&config.ignore.patterns)?;
+    let ignore_patterns = get_ignore_patterns(&config.default.ignore_patterns)?;
     let combined_source_code = walk_and_combine(project_dir, &ignore_patterns)?;
 
     if let Some(action) = get_action(args, &config) {
@@ -137,10 +132,10 @@ fn write_combined_code(output_file: &Path, combined_source_code: &str) -> io::Re
 }
 
 fn is_ignored(file_path: &Path, project_dir: &Path, ignore_patterns: &str) -> bool {
-    //.ignoreファイルで指定されているパターンに一致するかどうかを判断
     let relative_path = file_path.strip_prefix(project_dir).unwrap();
     let relative_path_str = relative_path.to_str().unwrap();
 
+    //設定ファイルで指定されているignore_patternsに含まれているかどうかを判断
     ignore_patterns
         .lines()
         .filter(|line| !line.trim().is_empty())
