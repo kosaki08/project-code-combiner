@@ -1,6 +1,7 @@
 [default]
 action = "copy"
-output_path = "~/Desktop/Projects/your-project/dist/combined.txt"
+output_path = "~/Desktop/Projects/your-project/dist/combined_code.txt"
+output_file_name = "combined_code.txt"
 ignore_patterns = [
   ".DS_Store",
   ".env",

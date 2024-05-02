@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 struct Default {
     action: Option<String>,
     output_path: Option<String>,
+    output_file_name: Option<String>,
     ignore_patterns: Option<Vec<String>>,
 }
 
@@ -47,7 +48,7 @@ fn run(project_dir: &Path, args: &[String]) -> io::Result<()> {
                 copy_to_clipboard(combined_source_code);
             }
             "save" => {
-                let output_path = get_output_path(args, &config.default.output_path);
+                let output_path = get_output_path(args, &config);
                 save_to_file(combined_source_code, &output_path);
             }
             _ => {
@@ -180,7 +181,9 @@ fn save_to_file(combined_code: String, output_path: &Path) {
     println!("Combined code saved to file: {}", output_path.display());
 }
 
-fn get_output_path(args: &[String], default_output_path: &Option<String>) -> PathBuf {
+fn get_output_path(args: &[String], config: &Config) -> PathBuf {
+    let default_output_path = &config.default.output_path;
+
     if let Some(path) = args
         .iter()
         .find_map(|arg| arg.strip_prefix("--output_path="))
@@ -190,6 +193,11 @@ fn get_output_path(args: &[String], default_output_path: &Option<String>) -> Pat
     }
 
     let current_dir = env::current_dir().expect("Failed to get current directory");
+
+    if let Some(file_name) = &config.default.output_file_name {
+        return current_dir.join(file_name);
+    }
+
     current_dir.join("combined_code.txt")
 }
 
