@@ -148,11 +148,8 @@ fn is_ignored(file_path: &Path, project_dir: &Path, ignore_patterns: &str) -> bo
 }
 
 fn convert_ignore_pattern_to_regex(pattern: &str) -> String {
-    let mut regex_pattern = pattern
-        .replace(".", r"\.")
-        .replace("*", ".*")
-        .replace("/", r"\/")
-        .replace("?", ".");
+    let escaped_pattern = regex::escape(pattern);
+    let mut regex_pattern = escaped_pattern.replace("\\*", ".*").replace("\\?", ".");
 
     // Handling of patterns that ignore directories
     if regex_pattern.ends_with("/") {
