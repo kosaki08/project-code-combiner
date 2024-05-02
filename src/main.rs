@@ -23,7 +23,7 @@ fn print_help() {
     println!("Usage: project_code_combiner [OPTIONS] <PROJECT_DIRECTORY>");
     println!();
     println!("Options:");
-    println!("  --clipboard                 Copy the combined code to the clipboard");
+    println!("  --copy                      Copy the combined code to the clipboard");
     println!("  --save                      Save the combined code to a file");
     println!("  --output_path=<PATH>        Specify the output file path");
     println!("  --ignore_file_path=<PATH>   Specify the ignore file path in .gitignore format");
@@ -64,7 +64,7 @@ fn run(project_dir: &Path, args: &[String]) -> io::Result<()> {
 }
 
 fn get_action(args: &[String], config: &Config) -> Option<String> {
-    if args.contains(&String::from("--clipboard")) {
+    if args.contains(&String::from("--copy")) {
         return Some("copy".to_string());
     }
 
@@ -184,14 +184,13 @@ fn get_output_path(args: &[String], default_output_path: &Option<String>) -> Pat
     if let Some(path) = args
         .iter()
         .find_map(|arg| arg.strip_prefix("--output_path="))
+        .or_else(|| default_output_path.as_ref().map(|x| x.as_str()))
     {
-        expand_tilde(path)
-    } else if let Some(path) = default_output_path {
-        expand_tilde(path)
-    } else {
-        let current_dir = env::current_dir().expect("Failed to get current directory");
-        current_dir.join("combined_code.txt")
+        return expand_tilde(path);
     }
+
+    let current_dir = env::current_dir().expect("Failed to get current directory");
+    current_dir.join("combined_code.txt")
 }
 
 fn expand_tilde(path: &str) -> PathBuf {
