@@ -4,7 +4,7 @@ use regex::Regex;
 use serde::Deserialize;
 use std::env;
 use std::fs;
-use std::io::{self, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Deserialize)]
@@ -37,18 +37,18 @@ fn print_version() {
     println!("Project Code Combiner v{}", version);
 }
 
-fn run(project_dir: &Path, args: &[String]) -> io::Result<()> {
+fn run(project_dir: &Path, args: Vec<String>) -> io::Result<()> {
     let config = load_config()?;
     let ignore_patterns = get_ignore_patterns(&config.default.ignore_patterns)?;
     let combined_source_code = walk_and_combine(project_dir, &ignore_patterns)?;
 
-    if let Some(action) = get_action(args, &config) {
+    if let Some(action) = get_action(&args, &config) {
         match action.as_str() {
             "copy" => {
                 copy_to_clipboard(combined_source_code);
             }
             "save" => {
-                let output_path = get_output_path(args, &config);
+                let output_path = get_output_path(&args, &config);
                 save_to_file(combined_source_code, &output_path);
             }
             _ => {
@@ -80,21 +80,23 @@ fn load_config() -> io::Result<Config> {
     let home_dir = env::var("HOME").unwrap_or_else(|_| env::var("USERPROFILE").unwrap());
     let config_path = PathBuf::from(home_dir).join(".pcc_config.toml");
 
-    if !config_path.exists() {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            "Config file not found",
-        ));
-    }
+    let config_str = match fs::read_to_string(&config_path) {
+        Ok(content) => content,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Config file not found at: {}", config_path.display()),
+            ));
+        }
+        Err(err) => return Err(err),
+    };
 
-    let config_str = fs::read_to_string(config_path)?;
     let config: Result<Config, _> = toml::from_str(&config_str);
-
     config.map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
 
-fn get_ignore_patterns(ignore_patters_config: &Option<Vec<String>>) -> io::Result<String> {
-    if let Some(patterns) = ignore_patters_config {
+fn get_ignore_patterns(ignore_patterns_config: &Option<Vec<String>>) -> io::Result<String> {
+    if let Some(patterns) = ignore_patterns_config {
         if !patterns.is_empty() {
             return Ok(patterns.join("\n"));
         }
@@ -125,23 +127,20 @@ fn walk_and_combine(project_dir: &Path, ignore_patterns: &str) -> io::Result<Str
     Ok(combined_source_code)
 }
 
-fn write_combined_code(output_file: &Path, combined_source_code: &str) -> io::Result<()> {
-    let mut output_file = fs::File::create(output_file)?;
-    output_file.write_all(combined_source_code.as_bytes())?;
-
-    Ok(())
+fn write_combined_code(output_file_path: &Path, combined_source_code: &str) -> io::Result<()> {
+    fs::write(output_file_path, combined_source_code)
 }
 
 fn is_ignored(file_path: &Path, project_dir: &Path, ignore_patterns: &str) -> bool {
     let relative_path = file_path.strip_prefix(project_dir).unwrap();
     let relative_path_str = relative_path.to_str().unwrap();
 
-    //設定ファイルで指定されているignore_patternsに含まれているかどうかを判断
+    // Determine if it is included in the ignore_patterns specified in the configuration file
     ignore_patterns
         .lines()
         .filter(|line| !line.trim().is_empty())
         .any(|pattern| {
-            // 正規表現を使用してパターンを解析
+            // Analyze patterns using regular expressions
             let regex_pattern = convert_ignore_pattern_to_regex(pattern);
             let regex = Regex::new(&regex_pattern).unwrap();
             regex.is_match(relative_path_str)
@@ -155,12 +154,12 @@ fn convert_ignore_pattern_to_regex(pattern: &str) -> String {
         .replace("/", r"\/")
         .replace("?", ".");
 
-    // ディレクトリを無視するパターンの処理
+    // Handling of patterns that ignore directories
     if regex_pattern.ends_with("/") {
         regex_pattern.push_str(".*");
     }
 
-    // パターンがスラッシュ（`/`）で始まっていない場合、先頭に`.*`を追加
+    // If the pattern does not begin with a slash (`/`), prefix it with `. *` at the beginning
     if !regex_pattern.starts_with("/") {
         regex_pattern.insert_str(0, ".*");
     }
@@ -233,7 +232,7 @@ fn main() {
         std::process::exit(0);
     }
 
-    // コマンドライン引数から対象のディレクトリを取得
+    // Get project directory from command line arguments
     let project_directory = match env::args().nth(1) {
         Some(dir) => PathBuf::from(dir),
         None => {
@@ -243,7 +242,7 @@ fn main() {
         }
     };
 
-    match run(&project_directory, &args) {
+    match run(&project_directory, args) {
         Ok(_) => println!("Source code combined successfully."),
         Err(err) => eprintln!("Error: {}", err),
     }
