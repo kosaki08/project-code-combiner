@@ -1,13 +1,13 @@
 # Project Code Combiner
 
-Project Code Combiner (PCC) is a command-line tool that combines source code files in a project directory into a single file or copy to clipboard. This tool is useful for combining multiple files into a single file for asking questions to AI models or sharing code snippets.
+Project Code Combiner is a command-line tool that combines source code files in a project directory into a single file or copy to clipboard. This tool is useful for combining multiple files into a single file for asking questions to AI models or sharing code snippets.
 
 ## Usage
 
 To combine files, use the following command in your terminal:
 
 ```bash
-$ cargo run <project_directory>
+$ cargo run </path/to/project>
 ```
 
 You can also include options to override the behavior of the application as described below.
@@ -31,7 +31,7 @@ Here are the available command line options for customizing the execution:
 ### Basic Usage:
 
 ```bash
-$ cargo run /path/to/project
+$ cargo run </path/to/project> [OPTIONS]
 ```
 
 This command processes the files in the specified project directory, perform the default actions (copy to clipboard or save to file) listed in the configuration file `.pcc_config.toml`. Override the default action if the following options are given
@@ -39,7 +39,7 @@ This command processes the files in the specified project directory, perform the
 ### Using Clipboard:
 
 ```bash
-$ cargo run /path/to/project --copy
+$ cargo run </path/to/project> --copy
 ```
 
 This command processes the files and copies the combined source code directly to the clipboard, without saving it to a file.
@@ -47,7 +47,7 @@ This command processes the files and copies the combined source code directly to
 ### Using Save to File:
 
 ```bash
-$ cargo run /path/to/project --save
+$ cargo run </path/to/project> --save
 ```
 
 This command processes the files and saves the combined source code to the default output file path specified in the configuration file.
@@ -55,7 +55,7 @@ This command processes the files and saves the combined source code to the defau
 ### Using Custom Output Path:
 
 ```bash
-$ cargo run /path/to/project --output_path=/path/to/output/file
+$ cargo run </path/to/project> --output_path=/path/to/output/file
 ```
 
 This command processes the files and saves the combined source code to the specified output file path.
@@ -63,7 +63,7 @@ This command processes the files and saves the combined source code to the speci
 ### Using Custom Ignore File:
 
 ```bash
-$ cargo run /path/to/project --ignore_file_path=/path/to/custom/ignore.file
+$ cargo run </path/to/project> --ignore_file_path=/path/to/custom/ignore.file
 ```
 
 This allows you to use a custom ignore file instead of .pcc_ignore.
@@ -100,7 +100,7 @@ You can install the binary globally to make it accessible from any location on y
    Test the installation by running the command from any location:
 
    ```bash
-   pcc <options>
+   pcc --version
    ```
 
 ## Uninstall

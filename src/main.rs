@@ -20,7 +20,7 @@ struct Config {
 }
 
 fn print_help() {
-    println!("Usage: project_code_combinator [OPTIONS] <PROJECT_DIRECTORY>");
+    println!("Usage: project_code_combiner [OPTIONS] <PROJECT_DIRECTORY>");
     println!();
     println!("Options:");
     println!("  --clipboard                 Copy the combined code to the clipboard");
@@ -33,7 +33,7 @@ fn print_help() {
 
 fn print_version() {
     let version = option_env!("CARGO_PKG_VERSION").unwrap_or("unknown");
-    println!("Project Code Combinator v{}", version);
+    println!("Project Code Combiner v{}", version);
 }
 
 fn run(project_dir: &Path, args: &[String]) -> io::Result<()> {
