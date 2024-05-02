@@ -1,6 +1,6 @@
 [package]
 name = "pcc"
-version = "0.1.0"
+version = "0.2.4"
 edition = "2021"
 description = "A simple command line tool that combines source code files in a project directory into a single file or copy to clipboard."
 license = "MIT"
