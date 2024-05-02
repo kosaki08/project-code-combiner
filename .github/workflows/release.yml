@@ -19,8 +19,14 @@ jobs:
         run: |
           cargo build --release
 
-      - name: Create release
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Upload Binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: binary-artifact
+          path: target/release/pcc
+
+      - name: Create Release
+        id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -29,3 +35,13 @@ jobs:
           release_name: Release ${{ github.ref }}
           draft: false
           prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./target/release/pcc
+          asset_name: pcc
+          asset_content_type: application/octet-stream
