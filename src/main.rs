@@ -40,7 +40,20 @@ fn print_version() {
 fn run(project_dir: &Path, args: Vec<String>) -> io::Result<()> {
     let config = load_config()?;
     let ignore_patterns = get_ignore_patterns(&config.default.ignore_patterns)?;
-    let combined_source_code = walk_and_combine(project_dir, &ignore_patterns)?;
+    let default_sep = "-".repeat(30);
+    let left_sep = args
+        .iter()
+        .find(|arg| arg.starts_with("--left_sep="))
+        .and_then(|arg| arg.strip_prefix("--left_sep="))
+        .unwrap_or(default_sep.as_str());
+
+    let right_sep = args
+        .iter()
+        .find(|arg| arg.starts_with("--right_sep="))
+        .and_then(|arg| arg.strip_prefix("--right_sep="))
+        .unwrap_or(&default_sep.as_str());
+    let combined_source_code =
+        walk_and_combine(project_dir, &ignore_patterns, left_sep, right_sep)?;
 
     if let Some(action) = get_action(&args, &config) {
         match action.as_str() {
@@ -105,7 +118,12 @@ fn get_ignore_patterns(ignore_patterns_config: &Option<Vec<String>>) -> io::Resu
     Ok(String::new())
 }
 
-fn walk_and_combine(project_dir: &Path, ignore_patterns: &str) -> io::Result<String> {
+fn walk_and_combine(
+    project_dir: &Path,
+    ignore_patterns: &str,
+    left_sep: &str,
+    right_sep: &str,
+) -> io::Result<String> {
     let mut combined_source_code = String::new();
 
     for result in Walk::new(project_dir).filter_map(|r| r.ok()) {
@@ -115,9 +133,9 @@ fn walk_and_combine(project_dir: &Path, ignore_patterns: &str) -> io::Result<Str
             let relative_path = path.strip_prefix(project_dir).unwrap();
             combined_source_code.push_str(&format!(
                 "{}\n{}\n{}\n",
-                "*".repeat(30),
+                left_sep,
                 relative_path.display(),
-                "*".repeat(30)
+                right_sep
             ));
             combined_source_code.push_str(&file_content);
             combined_source_code.push('\n');
