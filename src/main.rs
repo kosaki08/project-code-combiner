@@ -1,5 +1,4 @@
 use clipboard::{ClipboardContext, ClipboardProvider};
-use ignore::Walk;
 use regex::Regex;
 use serde::Deserialize;
 use std::env;
@@ -13,11 +12,39 @@ struct Default {
     output_path: Option<String>,
     output_file_name: Option<String>,
     ignore_patterns: Option<Vec<String>>,
+    use_relative_paths: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Config {
     default: Default,
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    if args.contains(&String::from("--help")) {
+        print_help();
+        std::process::exit(0);
+    }
+
+    if args.contains(&String::from("--version")) {
+        print_version();
+        std::process::exit(0);
+    }
+
+    let target_paths: Vec<PathBuf> = env::args().skip(1).map(PathBuf::from).collect();
+
+    if target_paths.is_empty() {
+        eprintln!("Error: No target files or directories specified.");
+        print_help();
+        std::process::exit(1);
+    }
+
+    match run(&target_paths, &args) {
+        Ok(()) => println!("Project code combined successfully."),
+        Err(err) => eprintln!("Error: {}", err),
+    }
 }
 
 fn print_help() {
@@ -30,6 +57,8 @@ fn print_help() {
     println!("  --ignore_file_path=<PATH>   Specify the ignore file path in .gitignore format");
     println!("  --help                      Show this help message");
     println!("  --version                   Show version information");
+    println!("  --relative                  Use relative paths (default: true)");
+    println!("  --no-relative               Do not use relative paths");
 }
 
 fn print_version() {
@@ -37,43 +66,20 @@ fn print_version() {
     println!("Project Code Combiner v{}", version);
 }
 
-fn run(project_dir: &Path, args: Vec<String>) -> io::Result<()> {
+fn run(target_paths: &[PathBuf], args: &[String]) -> io::Result<()> {
     let config = load_config()?;
-    let ignore_patterns = get_ignore_patterns(&config.default.ignore_patterns)?;
-    let combined_source_code = walk_and_combine(project_dir, &ignore_patterns)?;
+    let (ignore_patterns, left_sep, right_sep, use_relative_paths) =
+        get_config_settings(args, &config);
 
-    if let Some(action) = get_action(&args, &config) {
-        match action.as_str() {
-            "copy" => {
-                copy_to_clipboard(combined_source_code);
-            }
-            "save" => {
-                let output_path = get_output_path(&args, &config);
-                save_to_file(combined_source_code, &output_path);
-            }
-            _ => {
-                eprintln!("Unknown action: {}", action);
-                std::process::exit(1);
-            }
-        }
-    } else {
-        eprintln!("No action specified");
-        std::process::exit(1);
-    }
+    let combined_source_code = process_files(
+        target_paths,
+        &ignore_patterns,
+        &left_sep,
+        &right_sep,
+        use_relative_paths,
+    )?;
 
-    Ok(())
-}
-
-fn get_action(args: &[String], config: &Config) -> Option<String> {
-    if args.contains(&String::from("--copy")) {
-        return Some("copy".to_string());
-    }
-
-    if args.contains(&String::from("--save")) {
-        return Some("save".to_string());
-    }
-
-    config.default.action.clone()
+    execute_action(args, &config, combined_source_code)
 }
 
 fn load_config() -> io::Result<Config> {
@@ -95,6 +101,29 @@ fn load_config() -> io::Result<Config> {
     config.map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
 
+fn get_config_settings(args: &[String], config: &Config) -> (String, String, String, bool) {
+    let ignore_patterns = get_ignore_patterns(&config.default.ignore_patterns).unwrap_or_default();
+    let default_sep = "-".repeat(30);
+    let left_sep = args
+        .iter()
+        .find(|arg| arg.starts_with("--left_sep="))
+        .and_then(|arg| arg.strip_prefix("--left_sep="))
+        .unwrap_or(&default_sep);
+    let right_sep = args
+        .iter()
+        .find(|arg| arg.starts_with("--right_sep="))
+        .and_then(|arg| arg.strip_prefix("--right_sep="))
+        .unwrap_or(&default_sep);
+    let use_relative_paths = get_use_relative_paths(args, config);
+
+    (
+        ignore_patterns,
+        left_sep.to_string(),
+        right_sep.to_string(),
+        use_relative_paths,
+    )
+}
+
 fn get_ignore_patterns(ignore_patterns_config: &Option<Vec<String>>) -> io::Result<String> {
     if let Some(patterns) = ignore_patterns_config {
         if !patterns.is_empty() {
@@ -105,76 +134,188 @@ fn get_ignore_patterns(ignore_patterns_config: &Option<Vec<String>>) -> io::Resu
     Ok(String::new())
 }
 
-fn walk_and_combine(project_dir: &Path, ignore_patterns: &str) -> io::Result<String> {
+fn get_action(args: &[String], config: &Config) -> Option<String> {
+    if args.contains(&String::from("--copy")) {
+        return Some("copy".to_string());
+    }
+
+    if args.contains(&String::from("--save")) {
+        return Some("save".to_string());
+    }
+
+    config.default.action.clone()
+}
+
+fn process_files_common(
+    target_path: &Path,
+    ignore_patterns: &str,
+    left_sep: &str,
+    right_sep: &str,
+    use_relative_paths: bool,
+) -> io::Result<String> {
+    if !target_path.exists() {
+        eprintln!(
+            "Warning: Skipping non-existent path: {}",
+            target_path.display()
+        );
+        return Ok(String::new());
+    }
+
+    if target_path.is_file() {
+        return process_file(
+            target_path,
+            ignore_patterns,
+            left_sep,
+            right_sep,
+            use_relative_paths,
+        );
+    }
+
+    if !target_path.is_dir() {
+        eprintln!("Warning: Skipping invalid path: {}", target_path.display());
+        return Ok(String::new());
+    }
+
+    process_directory(
+        target_path,
+        ignore_patterns,
+        left_sep,
+        right_sep,
+        use_relative_paths,
+    )
+}
+
+fn process_directory(
+    directory_path: &Path,
+    ignore_patterns: &str,
+    left_sep: &str,
+    right_sep: &str,
+    use_relative_paths: bool,
+) -> io::Result<String> {
     let mut combined_source_code = String::new();
 
-    for result in Walk::new(project_dir).filter_map(|r| r.ok()) {
-        let path = result.path();
-        if path.is_file() && !is_ignored(path, project_dir, ignore_patterns) {
-            let file_content = fs::read_to_string(path)?;
-            let relative_path = path.strip_prefix(project_dir).unwrap();
-            combined_source_code.push_str(&format!(
-                "{}\n{}\n{}\n",
-                "*".repeat(30),
-                relative_path.display(),
-                "*".repeat(30)
-            ));
-            combined_source_code.push_str(&file_content);
-            combined_source_code.push('\n');
+    for entry in fs::read_dir(directory_path)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() && !is_ignored(&path, directory_path, ignore_patterns) {
+            let file_source_code = process_file_with_relative_path(
+                &path,
+                directory_path,
+                ignore_patterns,
+                left_sep,
+                right_sep,
+                use_relative_paths,
+            )?;
+            combined_source_code.push_str(&file_source_code);
         }
     }
 
     Ok(combined_source_code)
 }
 
-fn write_combined_code(output_file_path: &Path, combined_source_code: &str) -> io::Result<()> {
-    fs::write(output_file_path, combined_source_code)
+fn process_file_with_relative_path(
+    file_path: &Path,
+    base_path: &Path,
+    ignore_patterns: &str,
+    left_sep: &str,
+    right_sep: &str,
+    use_relative_paths: bool,
+) -> io::Result<String> {
+    let relative_path = if use_relative_paths {
+        file_path.strip_prefix(base_path).unwrap()
+    } else {
+        file_path
+    };
+
+    process_file(
+        relative_path,
+        ignore_patterns,
+        left_sep,
+        right_sep,
+        use_relative_paths,
+    )
 }
 
-fn is_ignored(file_path: &Path, project_dir: &Path, ignore_patterns: &str) -> bool {
-    let relative_path = file_path.strip_prefix(project_dir).unwrap();
-    let relative_path_str = relative_path.to_str().unwrap();
+fn process_files(
+    target_paths: &[PathBuf],
+    ignore_patterns: &str,
+    left_sep: &str,
+    right_sep: &str,
+    use_relative_paths: bool,
+) -> io::Result<String> {
+    let mut combined_source_code = String::new();
 
-    // Determine if it is included in the ignore_patterns specified in the configuration file
-    ignore_patterns
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .any(|pattern| {
-            // Analyze patterns using regular expressions
-            let regex_pattern = convert_ignore_pattern_to_regex(pattern);
-            let regex = Regex::new(&regex_pattern).unwrap();
-            regex.is_match(relative_path_str)
-        })
-}
-
-fn convert_ignore_pattern_to_regex(pattern: &str) -> String {
-    let escaped_pattern = regex::escape(pattern);
-    let mut regex_pattern = escaped_pattern.replace("\\*", ".*").replace("\\?", ".");
-
-    // Handling of patterns that ignore directories
-    if regex_pattern.ends_with("/") {
-        regex_pattern.push_str(".*");
+    for target_path in target_paths {
+        let dir_source_code = process_files_common(
+            target_path,
+            ignore_patterns,
+            left_sep,
+            right_sep,
+            use_relative_paths,
+        )?;
+        combined_source_code.push_str(&dir_source_code);
     }
 
-    // If the pattern does not begin with a slash (`/`), prefix it with `. *` at the beginning
-    if !regex_pattern.starts_with("/") {
-        regex_pattern.insert_str(0, ".*");
+    Ok(combined_source_code)
+}
+
+fn process_file(
+    file_path: &Path,
+    ignore_patterns: &str,
+    left_sep: &str,
+    right_sep: &str,
+    use_relative_paths: bool,
+) -> io::Result<String> {
+    if is_ignored(file_path, file_path.parent().unwrap(), ignore_patterns) {
+        return Ok(String::new());
     }
 
-    format!("{}", regex_pattern)
+    let file_content = fs::read_to_string(file_path)?;
+    let formatted_content = if use_relative_paths {
+        let relative_path = file_path.strip_prefix(file_path.parent().unwrap()).unwrap();
+        format_file_content(relative_path, &file_content, left_sep, right_sep)
+    } else {
+        format_file_content(file_path, &file_content, left_sep, right_sep)
+    };
+    Ok(formatted_content)
 }
 
-fn copy_to_clipboard(combined_code: String) {
-    let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
-    ctx.set_contents(combined_code)
-        .expect("Failed to copy to clipboard");
-    println!("Combined code copied to clipboard.");
+fn format_file_content(
+    file_path: &Path,
+    file_content: &str,
+    left_sep: &str,
+    right_sep: &str,
+) -> String {
+    format!(
+        "{}\n{}\n{}\n{}\n",
+        left_sep,
+        file_path.display(),
+        right_sep,
+        file_content
+    )
 }
 
-fn save_to_file(combined_code: String, output_path: &Path) {
-    write_combined_code(output_path, &combined_code)
-        .expect("Failed to write combined code to file");
-    println!("Combined code saved to file: {}", output_path.display());
+fn execute_action(
+    args: &[String],
+    config: &Config,
+    combined_source_code: String,
+) -> io::Result<()> {
+    if let Some(action) = get_action(args, config) {
+        match action.as_str() {
+            "copy" => copy_to_clipboard(combined_source_code),
+            "save" => {
+                let output_path = get_output_path(args, config);
+                save_to_file(combined_source_code, &output_path)
+            }
+            _ => {
+                eprintln!("Unknown action: {}", action);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        eprintln!("No action specified");
+        std::process::exit(1);
+    }
 }
 
 fn get_output_path(args: &[String], config: &Config) -> PathBuf {
@@ -183,7 +324,7 @@ fn get_output_path(args: &[String], config: &Config) -> PathBuf {
     if let Some(path) = args
         .iter()
         .find_map(|arg| arg.strip_prefix("--output_path="))
-        .or_else(|| default_output_path.as_ref().map(|x| x.as_str()))
+        .or_else(|| default_output_path.as_deref())
     {
         return expand_tilde(path);
     }
@@ -197,50 +338,89 @@ fn get_output_path(args: &[String], config: &Config) -> PathBuf {
     current_dir.join("combined_code.txt")
 }
 
+fn copy_to_clipboard(combined_code: String) -> io::Result<()> {
+    let mut ctx: ClipboardContext = ClipboardProvider::new().map_err(|err| {
+        io::Error::new(
+            io::ErrorKind::Other,
+            format!("Failed to create clipboard context: {}", err),
+        )
+    })?;
+
+    ctx.set_contents(combined_code).map_err(|err| {
+        io::Error::new(
+            io::ErrorKind::Other,
+            format!("Failed to copy to clipboard: {}", err),
+        )
+    })?;
+
+    println!("Combined code copied to clipboard.");
+    Ok(())
+}
+
+fn save_to_file(combined_code: String, output_path: &Path) -> io::Result<()> {
+    write_combined_code(output_path, &combined_code)?;
+    println!("Combined code saved to file: {}", output_path.display());
+    Ok(())
+}
+
+fn write_combined_code(output_file_path: &Path, combined_source_code: &str) -> io::Result<()> {
+    fs::write(output_file_path, combined_source_code)
+}
+
+fn get_use_relative_paths(args: &[String], config: &Config) -> bool {
+    if args.contains(&String::from("--relative")) {
+        return true;
+    }
+
+    if args.contains(&String::from("--no-relative")) {
+        return false;
+    }
+
+    config.default.use_relative_paths.unwrap_or(true)
+}
+
+fn is_ignored(file_path: &Path, project_dir: &Path, ignore_patterns: &str) -> bool {
+    let relative_path = match file_path.strip_prefix(project_dir) {
+        Ok(path) => path,
+        Err(_) => return false,
+    };
+    let relative_path_str = relative_path.to_str().unwrap();
+
+    ignore_patterns
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .any(|pattern| {
+            let regex_pattern = convert_ignore_pattern_to_regex(pattern);
+            let regex = Regex::new(&regex_pattern).unwrap();
+            regex.is_match(relative_path_str)
+        })
+}
+
+fn convert_ignore_pattern_to_regex(pattern: &str) -> String {
+    let escaped_pattern = regex::escape(pattern);
+    let regex_pattern = format!(
+        "^{}$",
+        escaped_pattern
+            .replace("\\*\\*", ".*")
+            .replace("\\*", "[^/]*")
+            .replace("\\?", "[^/]")
+            .replace("/", "/.*")
+    );
+
+    regex_pattern
+}
+
 fn expand_tilde(path: &str) -> PathBuf {
     if !path.starts_with('~') {
         return PathBuf::from(path);
     }
 
     let home_dir = env::var("HOME")
-        .ok()
-        .or_else(|| env::var("USERPROFILE").ok())
+        .or_else(|_| env::var("USERPROFILE"))
         .expect("Failed to get home directory");
 
-    if let Some(stripped_path) = path.strip_prefix("~/") {
-        let mut expanded_path = PathBuf::from(home_dir);
-        expanded_path.push(stripped_path);
-        return expanded_path;
-    }
-
-    PathBuf::from(path)
-}
-
-fn main() {
-    let args: Vec<String> = env::args().collect();
-
-    if args.contains(&String::from("--help")) {
-        print_help();
-        std::process::exit(0);
-    }
-
-    if args.contains(&String::from("--version")) {
-        print_version();
-        std::process::exit(0);
-    }
-
-    // Get project directory from command line arguments
-    let project_directory = match env::args().nth(1) {
-        Some(dir) => PathBuf::from(dir),
-        None => {
-            eprintln!("Error: Project directory not specified.");
-            print_help();
-            std::process::exit(1);
-        }
-    };
-
-    match run(&project_directory, args) {
-        Ok(_) => println!("Source code combined successfully."),
-        Err(err) => eprintln!("Error: {}", err),
-    }
+    let stripped_path = path.strip_prefix("~/").unwrap_or(path);
+    let mut expanded_path = PathBuf::from(home_dir);
+    expanded_path.push(stripped_path);
+    expanded_path
 }
