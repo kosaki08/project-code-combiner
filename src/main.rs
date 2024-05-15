@@ -206,19 +206,24 @@ fn is_ignored(file_path: &Path, project_dir: &Path, ignore_patterns: &str) -> bo
 
 fn convert_ignore_pattern_to_regex(pattern: &str) -> String {
     let escaped_pattern = regex::escape(pattern);
-    let mut regex_pattern = escaped_pattern.replace("\\*", ".*").replace("\\?", ".");
+    let mut regex_pattern = escaped_pattern
+        .replace("\\*\\*", ".*")
+        .replace("\\*", "[^/]*")
+        .replace("\\?", "[^/]");
 
     // Handling of patterns that ignore directories
     if regex_pattern.ends_with("/") {
         regex_pattern.push_str(".*");
     }
 
-    // If the pattern does not begin with a slash (`/`), prefix it with `. *` at the beginning
+    // If the pattern does not begin with a slash (`/`), prefix it with `^` at the beginning
     if !regex_pattern.starts_with("/") {
-        regex_pattern.insert_str(0, ".*");
+        regex_pattern.insert_str(0, "^");
+    } else {
+        regex_pattern.remove(0);
     }
 
-    format!("{}", regex_pattern)
+    format!("^{}$", regex_pattern)
 }
 
 fn copy_to_clipboard(combined_code: String) {
