@@ -1,5 +1,4 @@
 use clipboard::{ClipboardContext, ClipboardProvider};
-use ignore::Walk;
 use regex::Regex;
 use serde::Deserialize;
 use std::env;
@@ -152,41 +151,87 @@ fn process_files_common(
     right_sep: &str,
     use_relative_paths: bool,
 ) -> io::Result<String> {
-    let mut combined_source_code = String::new();
+    if !target_path.exists() {
+        eprintln!(
+            "Warning: Skipping non-existent path: {}",
+            target_path.display()
+        );
+        return Ok(String::new());
+    }
 
     if target_path.is_file() {
-        let file_source_code = process_file(
+        return process_file(
             target_path,
             ignore_patterns,
             left_sep,
             right_sep,
             use_relative_paths,
-        )?;
-        combined_source_code.push_str(&file_source_code);
-    } else if target_path.is_dir() {
-        for result in Walk::new(target_path).filter_map(|r| r.ok()) {
-            let path = result.path();
-            if path.is_file() && !is_ignored(path, target_path, ignore_patterns) {
-                if use_relative_paths {
-                    path.strip_prefix(target_path).unwrap()
-                } else {
-                    path
-                };
-                let file_source_code = process_file(
-                    path,
-                    ignore_patterns,
-                    left_sep,
-                    right_sep,
-                    use_relative_paths,
-                )?;
-                combined_source_code.push_str(&file_source_code);
-            }
-        }
-    } else {
+        );
+    }
+
+    if !target_path.is_dir() {
         eprintln!("Warning: Skipping invalid path: {}", target_path.display());
+        return Ok(String::new());
+    }
+
+    process_directory(
+        target_path,
+        ignore_patterns,
+        left_sep,
+        right_sep,
+        use_relative_paths,
+    )
+}
+
+fn process_directory(
+    directory_path: &Path,
+    ignore_patterns: &str,
+    left_sep: &str,
+    right_sep: &str,
+    use_relative_paths: bool,
+) -> io::Result<String> {
+    let mut combined_source_code = String::new();
+
+    for entry in fs::read_dir(directory_path)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() && !is_ignored(&path, directory_path, ignore_patterns) {
+            let file_source_code = process_file_with_relative_path(
+                &path,
+                directory_path,
+                ignore_patterns,
+                left_sep,
+                right_sep,
+                use_relative_paths,
+            )?;
+            combined_source_code.push_str(&file_source_code);
+        }
     }
 
     Ok(combined_source_code)
+}
+
+fn process_file_with_relative_path(
+    file_path: &Path,
+    base_path: &Path,
+    ignore_patterns: &str,
+    left_sep: &str,
+    right_sep: &str,
+    use_relative_paths: bool,
+) -> io::Result<String> {
+    let relative_path = if use_relative_paths {
+        file_path.strip_prefix(base_path).unwrap()
+    } else {
+        file_path
+    };
+
+    process_file(
+        relative_path,
+        ignore_patterns,
+        left_sep,
+        right_sep,
+        use_relative_paths,
+    )
 }
 
 fn process_files(
