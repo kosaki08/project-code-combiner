@@ -13,6 +13,7 @@ struct Default {
     output_path: Option<String>,
     output_file_name: Option<String>,
     ignore_patterns: Option<Vec<String>>,
+    use_relative_paths: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,13 +58,19 @@ fn process_file(
     ignore_patterns: &str,
     left_sep: &str,
     right_sep: &str,
+    use_relative_paths: bool,
 ) -> io::Result<String> {
     if is_ignored(file_path, file_path.parent().unwrap(), ignore_patterns) {
         return Ok(String::new());
     }
 
     let file_content = fs::read_to_string(file_path)?;
-    let formatted_content = format_file_content(file_path, &file_content, left_sep, right_sep);
+    let formatted_content = if use_relative_paths {
+        let relative_path = file_path.strip_prefix(file_path.parent().unwrap()).unwrap();
+        format_file_content(relative_path, &file_content, left_sep, right_sep)
+    } else {
+        format_file_content(file_path, &file_content, left_sep, right_sep)
+    };
     Ok(formatted_content)
 }
 
@@ -84,15 +91,26 @@ fn run(target_paths: &[PathBuf], args: Vec<String>) -> io::Result<()> {
         .unwrap_or(&default_sep.as_str());
 
     let mut combined_source_code = String::new();
+    let use_relative_paths = get_use_relative_paths(&args, &config);
 
     for target_path in target_paths {
         if target_path.is_file() {
-            let file_source_code =
-                process_file(target_path, &ignore_patterns, &left_sep, &right_sep)?;
+            let file_source_code = process_file(
+                target_path,
+                &ignore_patterns,
+                &left_sep,
+                &right_sep,
+                use_relative_paths,
+            )?;
             combined_source_code.push_str(&file_source_code);
         } else if target_path.is_dir() {
-            let dir_source_code =
-                walk_and_combine(target_path, &ignore_patterns, &left_sep, &right_sep)?;
+            let dir_source_code = walk_and_combine(
+                target_path,
+                &ignore_patterns,
+                &left_sep,
+                &right_sep,
+                use_relative_paths,
+            )?;
             combined_source_code.push_str(&dir_source_code);
         } else {
             eprintln!("Warning: Skipping invalid path: {}", target_path.display());
@@ -167,16 +185,21 @@ fn walk_and_combine(
     ignore_patterns: &str,
     left_sep: &str,
     right_sep: &str,
+    use_relative_paths: bool,
 ) -> io::Result<String> {
     let mut combined_source_code = String::new();
 
     for result in Walk::new(project_dir).filter_map(|r| r.ok()) {
         let path = result.path();
         if path.is_file() && !is_ignored(path, project_dir, ignore_patterns) {
+            let file_path = if use_relative_paths {
+                path.strip_prefix(project_dir).unwrap()
+            } else {
+                path
+            };
             let file_content = fs::read_to_string(path)?;
-            let relative_path = path.strip_prefix(project_dir).unwrap();
             let formatted_content =
-                format_file_content(relative_path, &file_content, left_sep, right_sep);
+                format_file_content(file_path, &file_content, left_sep, right_sep);
             combined_source_code.push_str(&formatted_content);
         }
     }
@@ -276,6 +299,18 @@ fn expand_tilde(path: &str) -> PathBuf {
     }
 
     PathBuf::from(path)
+}
+
+fn get_use_relative_paths(args: &[String], config: &Config) -> bool {
+    if args.contains(&String::from("--relative")) {
+        return true;
+    }
+
+    if args.contains(&String::from("--no-relative")) {
+        return false;
+    }
+
+    config.default.use_relative_paths.unwrap_or(true)
 }
 
 fn main() {
