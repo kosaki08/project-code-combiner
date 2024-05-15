@@ -37,7 +37,37 @@ fn print_version() {
     println!("Project Code Combiner v{}", version);
 }
 
-fn run(project_dir: &Path, args: Vec<String>) -> io::Result<()> {
+fn format_file_content(
+    file_path: &Path,
+    file_content: &str,
+    left_sep: &str,
+    right_sep: &str,
+) -> String {
+    format!(
+        "{}\n{}\n{}\n{}\n",
+        left_sep,
+        file_path.display(),
+        right_sep,
+        file_content
+    )
+}
+
+fn process_file(
+    file_path: &Path,
+    ignore_patterns: &str,
+    left_sep: &str,
+    right_sep: &str,
+) -> io::Result<String> {
+    if is_ignored(file_path, file_path.parent().unwrap(), ignore_patterns) {
+        return Ok(String::new());
+    }
+
+    let file_content = fs::read_to_string(file_path)?;
+    let formatted_content = format_file_content(file_path, &file_content, left_sep, right_sep);
+    Ok(formatted_content)
+}
+
+fn run(target_paths: &[PathBuf], args: Vec<String>) -> io::Result<()> {
     let config = load_config()?;
     let ignore_patterns = get_ignore_patterns(&config.default.ignore_patterns)?;
     let default_sep = "-".repeat(30);
@@ -52,8 +82,22 @@ fn run(project_dir: &Path, args: Vec<String>) -> io::Result<()> {
         .find(|arg| arg.starts_with("--right_sep="))
         .and_then(|arg| arg.strip_prefix("--right_sep="))
         .unwrap_or(&default_sep.as_str());
-    let combined_source_code =
-        walk_and_combine(project_dir, &ignore_patterns, left_sep, right_sep)?;
+
+    let mut combined_source_code = String::new();
+
+    for target_path in target_paths {
+        if target_path.is_file() {
+            let file_source_code =
+                process_file(target_path, &ignore_patterns, &left_sep, &right_sep)?;
+            combined_source_code.push_str(&file_source_code);
+        } else if target_path.is_dir() {
+            let dir_source_code =
+                walk_and_combine(target_path, &ignore_patterns, &left_sep, &right_sep)?;
+            combined_source_code.push_str(&dir_source_code);
+        } else {
+            eprintln!("Warning: Skipping invalid path: {}", target_path.display());
+        }
+    }
 
     if let Some(action) = get_action(&args, &config) {
         match action.as_str() {
@@ -131,14 +175,9 @@ fn walk_and_combine(
         if path.is_file() && !is_ignored(path, project_dir, ignore_patterns) {
             let file_content = fs::read_to_string(path)?;
             let relative_path = path.strip_prefix(project_dir).unwrap();
-            combined_source_code.push_str(&format!(
-                "{}\n{}\n{}\n",
-                left_sep,
-                relative_path.display(),
-                right_sep
-            ));
-            combined_source_code.push_str(&file_content);
-            combined_source_code.push('\n');
+            let formatted_content =
+                format_file_content(relative_path, &file_content, left_sep, right_sep);
+            combined_source_code.push_str(&formatted_content);
         }
     }
 
@@ -247,18 +286,16 @@ fn main() {
         std::process::exit(0);
     }
 
-    // Get project directory from command line arguments
-    let project_directory = match env::args().nth(1) {
-        Some(dir) => PathBuf::from(dir),
-        None => {
-            eprintln!("Error: Project directory not specified.");
-            print_help();
-            std::process::exit(1);
-        }
-    };
+    let target_paths: Vec<PathBuf> = env::args().skip(1).map(PathBuf::from).collect();
 
-    match run(&project_directory, args) {
-        Ok(_) => println!("Source code combined successfully."),
+    if target_paths.is_empty() {
+        eprintln!("Error: No target files or directories specified.");
+        print_help();
+        std::process::exit(1);
+    }
+
+    match run(&target_paths, args) {
+        Ok(_) => println!("Project code combined successfully."),
         Err(err) => eprintln!("Error: {}", err),
     }
 }
