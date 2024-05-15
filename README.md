@@ -1,93 +1,30 @@
 # Project Code Combiner
 
-Project Code Combiner is a command-line tool that combines source code files in a project directory into a single file or copy to clipboard. This tool is useful for combining multiple files into a single file for asking questions to AI models or sharing code snippets.
+Project Code Combiner is a command-line tool that combines source code files in a project directory into a single file or copies the combined code to the clipboard. This tool is useful for combining multiple files into a single file for asking questions to AI models or sharing code snippets.
 
-## Usage
+## Installation
 
-To combine files, use the following command in your terminal:
-
-```bash
-$ cargo run </path/to/project>
-```
-
-You can also include options to override the behavior of the application as described below.
-You can include options to override the default behavior specified in the configuration file `.pcc_config.toml`.
-
-### Optinos
-
-Here are the available command line options for customizing the execution:
-
-| Option                                     | Description                                                                                         |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `--copy`                                   | Copies the combined source code to the clipboard instead of saving it to a file.                    |
-| `--save`                                   | Save the combined source code to the fiile. File output destinations can override default settings. |
-| `--output_path`                            | Specify the output directory of the combined source code.                                           |
-| `--ignore_file_path=<path/to/ignore/file>` | Specify a custom path to an ignored file written in `.gitignore` file format.                       |
-| `--help`                                   | Display the help message.                                                                           |
-| `--version`                                | Display the version of the script.                                                                  |
-
-## Examples
-
-### Basic Usage:
-
-```bash
-$ cargo run </path/to/project> [OPTIONS]
-```
-
-This command processes the files in the specified project directory, perform the default actions (copy to clipboard or save to file) listed in the configuration file `.pcc_config.toml`. Override the default action if the following options are given
-
-### Using Clipboard:
-
-```bash
-$ cargo run </path/to/project> --copy
-```
-
-This command processes the files and copies the combined source code directly to the clipboard, without saving it to a file.
-
-### Using Save to File:
-
-```bash
-$ cargo run </path/to/project> --save
-```
-
-This command processes the files and saves the combined source code to the default output file path specified in the configuration file.
-
-### Using Custom Output Path:
-
-```bash
-$ cargo run </path/to/project> --output_path=/path/to/output/file
-```
-
-This command processes the files and saves the combined source code to the specified output file path.
-
-### Using Custom Ignore File:
-
-```bash
-$ cargo run </path/to/project> --ignore_file_path=/path/to/custom/ignore.file
-```
-
-This allows you to use a custom ignore file instead of .pcc_ignore.
-
-## Format of the Ignore File
-
-Configuration file can be written in .gitignore format. Place the configuration file `.pcc_ignore` in the project root or specify a custom path using the `--ignore_file_path` option.
-
-## Global Installation
-
-You can install the binary globally to make it accessible from any location on your system:
+To install the Project Code Combiner, follow these steps:
 
 ### For Linux and macOS:
 
-1. **Copy files**:
+1. **Download the Binary**:
 
-   Copy the binary to a directory included in your system's PATH, such as `/usr/local/bin` and copy the configuration file to your home directory:
+   Download the binary for your operating system from the [releases page](https://github.com/kosaki08/project-code-combiner/releases).
+
+2. **Extract the Binary**:
+
+   Extract the downloaded archive to a directory of your choice, for example, `~/pcc`.
+
+3. **Copy the Binary**:
+
+   Copy the `pcc` binary to a directory included in your system's PATH, such as `/usr/local/bin`:
 
    ```bash
-   sudo cp ./target/release/pcc /usr/local/bin/
-   sudo cp ./pcc_config.example.toml ~/.pcc_config.toml
+   sudo cp ~/pcc/pcc /usr/local/bin/
    ```
 
-2. **Set Execute Permissions (if necessary)**:
+4. **Set Execute Permissions**:
 
    Ensure that the binary is executable:
 
@@ -95,7 +32,19 @@ You can install the binary globally to make it accessible from any location on y
    sudo chmod +x /usr/local/bin/pcc
    ```
 
-3. **Verify Installation**:
+5. **Copy the Configuration File**:
+
+   Copy the example configuration file to your home directory:
+
+   ```bash
+   cp ~/pcc/pcc_config.example.toml ~/.pcc_config.toml
+   ```
+
+6. **Customize the Configuration File**:
+
+   Open the configuration file `~/.pcc_config.toml` in a text editor and customize the settings according to your preferences.
+
+7. **Verify Installation**:
 
    Test the installation by running the command from any location:
 
@@ -103,25 +52,190 @@ You can install the binary globally to make it accessible from any location on y
    pcc --version
    ```
 
-## Uninstall
+### For Windows:
+
+1. **Download the Binary**:
+
+   Download the binary for Windows from the [releases page](https://github.com/kosaki08/project-code-combiner/releases).
+
+2. **Extract the Binary**:
+
+   Extract the downloaded archive to a directory of your choice, for example, `C:\pcc`.
+
+3. **Add to System PATH**:
+
+   Add the directory containing the `pcc.exe` binary to your system's PATH environment variable. This allows you to run the command from any location in the command prompt.
+
+4. **Copy the Configuration File**:
+
+   Copy the example configuration file to your user profile directory:
+
+   ```bash
+   copy C:\pcc\pcc_config.example.toml %USERPROFILE%\.pcc_config.toml
+   ```
+
+5. **Customize the Configuration File**:
+
+   Open the configuration file `%USERPROFILE%\.pcc_config.toml` in a text editor and customize the settings according to your preferences.
+
+6. **Verify Installation**:
+
+   Test the installation by running the command from any location in the command prompt:
+
+   ```bash
+   pcc --version
+   ```
+
+## Usage
+
+To combine files, use the following command in your terminal:
+
+```bash
+$ pcc [OPTIONS] <PROJECT_DIRECTORY>
+```
+
+You can include options to override the default behavior specified in the configuration file `.pcc_config.toml`.
+
+### Options
+
+Here are the available command-line options for customizing the execution:
+
+| Option                      | Description                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------- |
+| `--copy`                    | Copies the combined source code to the clipboard instead of saving it to a file.                  |
+| `--save`                    | Saves the combined source code to a file. File output destinations can override default settings. |
+| `--output_path=<PATH>`      | Specifies the output file path for the combined source code.                                      |
+| `--ignore_file_path=<PATH>` | Specifies the ignore file path in .gitignore format.                                              |
+| `--help`                    | Displays the help message.                                                                        |
+| `--version`                 | Displays the version information.                                                                 |
+| `--relative`                | Uses relative paths for file references (default: true).                                          |
+| `--no-relative`             | Uses absolute paths for file references.                                                          |
+
+## Examples
+
+### Basic Usage:
+
+```bash
+$ pcc </path/to/project> [OPTIONS]
+```
+
+This command processes the files in the specified project directory and performs the default actions (copy to clipboard or save to file) listed in the configuration file `.pcc_config.toml`. Override the default action if the following options are given.
+
+### Using Clipboard:
+
+```bash
+$ pcc </path/to/project> --copy
+```
+
+This command processes the files and copies the combined source code directly to the clipboard, without saving it to a file.
+
+### Using Save to File:
+
+```bash
+$ pcc </path/to/project> --save
+```
+
+This command processes the files and saves the combined source code to the default output file path specified in the configuration file.
+
+### Using Custom Output Path:
+
+```bash
+$ pcc </path/to/project> --output_path=/path/to/output/file
+```
+
+This command processes the files and saves the combined source code to the specified output file path.
+
+### Using Custom Ignore File:
+
+```bash
+$ pcc </path/to/project> --ignore_file_path=/path/to/custom/ignore.file
+```
+
+This allows you to use a custom ignore file instead of the default ignore patterns specified in the configuration file.
+
+### Using Relative Paths:
+
+```bash
+$ pcc </path/to/project> --relative
+```
+
+This command processes the files and uses relative paths for file references in the combined source code. This is the default behavior.
+
+### Using Absolute Paths:
+
+```bash
+$ pcc </path/to/project> --no-relative
+```
+
+This command processes the files and uses absolute paths for file references in the combined source code.
+
+## Building from Source
+
+If you prefer to build the binary from the source code, follow these steps:
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/kosaki08/project-code-combiner.git
+   cd project-code-combiner
+   ```
+
+2. Build the binary:
+
+   ```bash
+   cargo build --release
+   ```
+
+   The binary will be generated in the `target/release` directory.
+
+3. Run the tool using `cargo run`:
+
+   ```bash
+   cargo run -- [OPTIONS] <PROJECT_DIRECTORY>
+   ```
+
+   Note the extra `--` after `cargo run` to pass the options and arguments to the tool.
+
+## Configuration
+
+The configuration file `.pcc_config.toml` should be placed in the user's home directory. It allows you to specify default settings for the tool.
+
+Example configuration file:
+
+```toml
+[default]
+action = "copy"
+output_path = "~/combined_code"
+output_file_name = "combined_code.txt"
+ignore_patterns = [
+    "target",
+    "*.log",
+    "*.txt",
+]
+use_relative_paths = true
+```
+
+## Format of the Ignore File
+
+The ignore file can be written in .gitignore format. You can specify the ignore file path using the `--ignore_file_path` option.
+
+## Uninstallation
 
 ### For Linux and macOS:
 
-To uninstall the binary, simply remove it from the directory where it was copied:
+To uninstall the tool, remove the binary from the directory where it was copied and delete the configuration file:
 
 ```bash
 sudo rm /usr/local/bin/pcc
-sudo rm ~/.pcc_config.toml
+rm ~/.pcc_config.toml
 ```
 
-## Development
+### For Windows:
 
-### Build the Binary
-
-To build the binary, run the following command:
+To uninstall the tool, remove the `pcc.exe` binary from the directory where it was copied, remove the directory from the system's PATH environment variable, and delete the configuration file:
 
 ```bash
-cargo build --release
+del %USERPROFILE%\.pcc_config.toml
 ```
 
 ## License

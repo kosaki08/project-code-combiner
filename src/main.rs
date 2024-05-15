@@ -57,6 +57,8 @@ fn print_help() {
     println!("  --ignore_file_path=<PATH>   Specify the ignore file path in .gitignore format");
     println!("  --help                      Show this help message");
     println!("  --version                   Show version information");
+    println!("  --relative                  Use relative paths (default: true)");
+    println!("  --no-relative               Do not use relative paths");
 }
 
 fn print_version() {
