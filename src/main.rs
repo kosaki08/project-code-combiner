@@ -1,4 +1,5 @@
 use clipboard::{ClipboardContext, ClipboardProvider};
+use ignore::Walk;
 use regex::Regex;
 use serde::Deserialize;
 use std::env;
@@ -57,8 +58,6 @@ fn print_help() {
     println!("  --ignore_file_path=<PATH>   Specify the ignore file path in .gitignore format");
     println!("  --help                      Show this help message");
     println!("  --version                   Show version information");
-    println!("  --relative                  Use relative paths (default: true)");
-    println!("  --no-relative               Do not use relative paths");
 }
 
 fn print_version() {
@@ -153,87 +152,41 @@ fn process_files_common(
     right_sep: &str,
     use_relative_paths: bool,
 ) -> io::Result<String> {
-    if !target_path.exists() {
-        eprintln!(
-            "Warning: Skipping non-existent path: {}",
-            target_path.display()
-        );
-        return Ok(String::new());
-    }
+    let mut combined_source_code = String::new();
 
     if target_path.is_file() {
-        return process_file(
+        let file_source_code = process_file(
             target_path,
             ignore_patterns,
             left_sep,
             right_sep,
             use_relative_paths,
-        );
-    }
-
-    if !target_path.is_dir() {
-        eprintln!("Warning: Skipping invalid path: {}", target_path.display());
-        return Ok(String::new());
-    }
-
-    process_directory(
-        target_path,
-        ignore_patterns,
-        left_sep,
-        right_sep,
-        use_relative_paths,
-    )
-}
-
-fn process_directory(
-    directory_path: &Path,
-    ignore_patterns: &str,
-    left_sep: &str,
-    right_sep: &str,
-    use_relative_paths: bool,
-) -> io::Result<String> {
-    let mut combined_source_code = String::new();
-
-    for entry in fs::read_dir(directory_path)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file() && !is_ignored(&path, directory_path, ignore_patterns) {
-            let file_source_code = process_file_with_relative_path(
-                &path,
-                directory_path,
-                ignore_patterns,
-                left_sep,
-                right_sep,
-                use_relative_paths,
-            )?;
-            combined_source_code.push_str(&file_source_code);
+        )?;
+        combined_source_code.push_str(&file_source_code);
+    } else if target_path.is_dir() {
+        for result in Walk::new(target_path).filter_map(|r| r.ok()) {
+            let path = result.path();
+            if path.is_file() && !is_ignored(path, target_path, ignore_patterns) {
+                if use_relative_paths {
+                    path.strip_prefix(target_path).unwrap()
+                } else {
+                    path
+                };
+                let file_source_code = process_file(
+                    path,
+                    ignore_patterns,
+                    left_sep,
+                    right_sep,
+                    use_relative_paths,
+                )?;
+                combined_source_code.push_str(&file_source_code);
+            }
         }
+    } else {
+        eprintln!("Warning: Skipping invalid path: {}", target_path.display());
     }
 
     Ok(combined_source_code)
-}
-
-fn process_file_with_relative_path(
-    file_path: &Path,
-    base_path: &Path,
-    ignore_patterns: &str,
-    left_sep: &str,
-    right_sep: &str,
-    use_relative_paths: bool,
-) -> io::Result<String> {
-    let relative_path = if use_relative_paths {
-        file_path.strip_prefix(base_path).unwrap()
-    } else {
-        file_path
-    };
-
-    process_file(
-        relative_path,
-        ignore_patterns,
-        left_sep,
-        right_sep,
-        use_relative_paths,
-    )
 }
 
 fn process_files(
@@ -397,17 +350,29 @@ fn is_ignored(file_path: &Path, project_dir: &Path, ignore_patterns: &str) -> bo
 }
 
 fn convert_ignore_pattern_to_regex(pattern: &str) -> String {
-    let escaped_pattern = regex::escape(pattern);
-    let regex_pattern = format!(
-        "^{}$",
-        escaped_pattern
-            .replace("\\*\\*", ".*")
-            .replace("\\*", "[^/]*")
-            .replace("\\?", "[^/]")
-            .replace("/", "/.*")
-    );
+    let mut regex_pattern = String::new();
 
-    regex_pattern
+    let mut in_bracket = false;
+    for c in pattern.chars() {
+        match c {
+            '*' if !in_bracket => regex_pattern.push_str(".*"),
+            '?' if !in_bracket => regex_pattern.push_str("."),
+            '[' => {
+                in_bracket = true;
+                regex_pattern.push(c);
+            }
+            ']' => {
+                in_bracket = false;
+                regex_pattern.push(c);
+            }
+            '!' if in_bracket => regex_pattern.push('^'),
+            '/' => regex_pattern.push_str("\\/"),
+            '.' => regex_pattern.push_str("\\."),
+            _ => regex_pattern.push(c),
+        }
+    }
+
+    format!("^{}$", regex_pattern)
 }
 
 fn expand_tilde(path: &str) -> PathBuf {
