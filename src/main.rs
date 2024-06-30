@@ -56,6 +56,7 @@ fn print_help() {
     println!("  --save                      Save the combined code to a file");
     println!("  --output_path=<PATH>        Specify the output file path");
     println!("  --ignore_file_path=<PATH>   Specify the ignore file path in .gitignore format");
+    println!("  --ignore=<PATTERN>          Add an additional ignore pattern (can be used multiple times)");
     println!("  --help                      Show this help message");
     println!("  --version                   Show version information");
 }
@@ -101,7 +102,17 @@ fn load_config() -> io::Result<Config> {
 }
 
 fn get_config_settings(args: &[String], config: &Config) -> (String, String, String, bool) {
-    let ignore_patterns = get_ignore_patterns(&config.default.ignore_patterns).unwrap_or_default();
+    let mut ignore_patterns =
+        get_ignore_patterns(&config.default.ignore_patterns).unwrap_or_default();
+    let additional_ignore_patterns = parse_additional_ignore_patterns(args);
+
+    if !additional_ignore_patterns.is_empty() {
+        if !ignore_patterns.is_empty() {
+            ignore_patterns.push('\n');
+        }
+        ignore_patterns.push_str(&additional_ignore_patterns.join("\n"));
+    }
+
     let default_sep = "-".repeat(30);
     let left_sep = args
         .iter()
@@ -131,6 +142,18 @@ fn get_ignore_patterns(ignore_patterns_config: &Option<Vec<String>>) -> io::Resu
     }
 
     Ok(String::new())
+}
+
+fn parse_additional_ignore_patterns(args: &[String]) -> Vec<String> {
+    args.iter()
+        .filter_map(|arg| {
+            if arg.starts_with("--ignore=") {
+                Some(arg.strip_prefix("--ignore=").unwrap().to_string())
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 fn get_action(args: &[String], config: &Config) -> Option<String> {
