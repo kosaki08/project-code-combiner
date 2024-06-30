@@ -106,6 +106,7 @@ Here are the available command-line options for customizing the execution:
 | `--save`                    | Saves the combined source code to a file. File output destinations can override default settings. |
 | `--output_path=<PATH>`      | Specifies the output file path for the combined source code.                                      |
 | `--ignore_file_path=<PATH>` | Specifies the ignore file path in .gitignore format.                                              |
+| `--ignore=<PATTERN>`        | Adds an additional ignore pattern (can be used multiple times).                                   |
 | `--help`                    | Displays the help message.                                                                        |
 | `--version`                 | Displays the version information.                                                                 |
 | `--relative`                | Uses relative paths for file references (default: true).                                          |
@@ -152,6 +153,14 @@ $ pcc </path/to/project> --ignore_file_path=/path/to/custom/ignore.file
 ```
 
 This allows you to use a custom ignore file instead of the default ignore patterns specified in the configuration file.
+
+### Using Additional Ignore Patterns:
+
+```bash
+$ pcc </path/to/project> --ignore=*.log --ignore=temp/ --ignore=*.bak
+```
+
+This command processes the files, ignoring files that match the patterns `*.log`, `temp/`, and `*.bak`, in addition to the ignore patterns specified in the configuration file.
 
 ### Using Relative Paths:
 
