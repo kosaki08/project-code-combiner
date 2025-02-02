@@ -154,10 +154,7 @@ fn process_files(
                 // Filter out ignored files from resolved dependencies
                 resolved_files
                     .into_iter()
-                    .filter(|path| {
-                        let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from(""));
-                        !is_ignored(path, &current_dir, &options.ignore_patterns)
-                    })
+                    .filter(|path| !is_ignored(path, &options.ignore_patterns))
                     .collect()
             } else {
                 vec![target_path.to_path_buf()]
@@ -170,7 +167,7 @@ fn process_files(
         } else if target_path.is_dir() {
             for entry in Walk::new(target_path).filter_map(Result::ok) {
                 let path = entry.path();
-                if path.is_file() && !is_ignored(path, target_path, &options.ignore_patterns) {
+                if path.is_file() && !is_ignored(path, &options.ignore_patterns) {
                     let file_source_code = process_single_file(path, options)?;
                     combined_source_code.push_str(&file_source_code);
                 }
@@ -185,11 +182,7 @@ fn process_files(
 }
 
 fn process_single_file(file_path: &Path, options: &ProcessingOptions) -> Result<String, AppError> {
-    if is_ignored(
-        file_path,
-        file_path.parent().unwrap(),
-        &options.ignore_patterns,
-    ) {
+    if is_ignored(file_path, &options.ignore_patterns) {
         return Ok(String::new());
     }
 
@@ -285,20 +278,18 @@ fn write_combined_code(
     Ok(())
 }
 
-fn is_ignored(file_path: &Path, project_dir: &Path, ignore_patterns: &str) -> bool {
-    let relative_path = match file_path.strip_prefix(project_dir) {
-        Ok(path) => path,
-        Err(_) => return false,
-    };
-    let relative_path_str = relative_path.to_str().unwrap();
+fn is_ignored(file_path: &Path, ignore_patterns: &str) -> bool {
+    let path_str = file_path.to_string_lossy();
 
     ignore_patterns
         .lines()
         .filter(|line| !line.trim().is_empty())
         .any(|pattern| {
             let regex_pattern = convert_ignore_pattern_to_regex(pattern);
-            let regex = Regex::new(&regex_pattern).unwrap();
-            regex.is_match(relative_path_str)
+            match Regex::new(&regex_pattern) {
+                Ok(regex) => regex.is_match(&path_str),
+                Err(_) => false,
+            }
         })
 }
 
