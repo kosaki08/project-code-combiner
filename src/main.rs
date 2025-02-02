@@ -1,4 +1,5 @@
 mod config;
+use clap::Parser;
 use clipboard::{ClipboardContext, ClipboardProvider};
 use config::Config;
 use ignore::Walk;
@@ -7,6 +8,38 @@ use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Target files or directories to process
+    #[arg(required = true)]
+    targets: Vec<PathBuf>,
+
+    /// Copy the combined code to clipboard
+    #[arg(long)]
+    copy: bool,
+
+    /// Save the combined code to file
+    #[arg(long)]
+    save: bool,
+
+    /// Output file path
+    #[arg(long)]
+    output_path: Option<String>,
+
+    /// Ignore file path in .gitignore format
+    #[arg(long)]
+    ignore_file_path: Option<String>,
+
+    /// Additional ignore patterns
+    #[arg(long = "ignore", value_name = "PATTERN")]
+    ignore_patterns: Vec<String>,
+
+    /// Use relative paths
+    #[arg(long, default_value_t = true)]
+    relative: bool,
+}
 
 #[derive(Debug)]
 enum AppError {
@@ -32,23 +65,11 @@ impl std::fmt::Display for AppError {
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let args = Args::parse();
 
-    if args.contains(&String::from("--help")) {
-        print_help();
-        std::process::exit(0);
-    }
-
-    if args.contains(&String::from("--version")) {
-        print_version();
-        std::process::exit(0);
-    }
-
-    let target_paths: Vec<PathBuf> = env::args().skip(1).map(PathBuf::from).collect();
-
+    let target_paths = args.targets.clone();
     if target_paths.is_empty() {
         eprintln!("Error: No target files or directories specified.");
-        print_help();
         std::process::exit(1);
     }
 
@@ -58,25 +79,7 @@ fn main() {
     }
 }
 
-fn print_help() {
-    println!("Usage: project_code_combiner [OPTIONS] <PROJECT_DIRECTORY>");
-    println!();
-    println!("Options:");
-    println!("  --copy                      Copy the combined code to the clipboard");
-    println!("  --save                      Save the combined code to a file");
-    println!("  --output_path=<PATH>        Specify the output file path");
-    println!("  --ignore_file_path=<PATH>   Specify the ignore file path in .gitignore format");
-    println!("  --ignore=<PATTERN>          Add an additional ignore pattern (can be used multiple times)");
-    println!("  --help                      Show this help message");
-    println!("  --version                   Show version information");
-}
-
-fn print_version() {
-    let version = option_env!("CARGO_PKG_VERSION").unwrap_or("unknown");
-    println!("Project Code Combiner v{}", version);
-}
-
-fn run(target_paths: &[PathBuf], args: &[String]) -> Result<(), AppError> {
+fn run(target_paths: &[PathBuf], args: &Args) -> Result<(), AppError> {
     let config = load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
     let (ignore_patterns, left_sep, right_sep, use_relative_paths) =
         get_config_settings(args, &config)?;
@@ -96,12 +99,9 @@ fn load_config() -> io::Result<Config> {
     Config::load()
 }
 
-fn get_config_settings(
-    args: &[String],
-    config: &Config,
-) -> io::Result<(String, String, String, bool)> {
+fn get_config_settings(args: &Args, config: &Config) -> io::Result<(String, String, String, bool)> {
     let mut ignore_patterns = get_ignore_patterns(&config.default.ignore_patterns)?;
-    let additional_ignore_patterns = parse_additional_ignore_patterns(args);
+    let additional_ignore_patterns = &args.ignore_patterns;
 
     if !additional_ignore_patterns.is_empty() {
         if !ignore_patterns.is_empty() {
@@ -111,17 +111,9 @@ fn get_config_settings(
     }
 
     let default_sep = "-".repeat(30);
-    let left_sep = args
-        .iter()
-        .find(|arg| arg.starts_with("--left_sep="))
-        .and_then(|arg| arg.strip_prefix("--left_sep="))
-        .unwrap_or(&default_sep);
-    let right_sep = args
-        .iter()
-        .find(|arg| arg.starts_with("--right_sep="))
-        .and_then(|arg| arg.strip_prefix("--right_sep="))
-        .unwrap_or(&default_sep);
-    let use_relative_paths = get_use_relative_paths(args, config)?;
+    let left_sep = &default_sep;
+    let right_sep = &default_sep;
+    let use_relative_paths = args.relative;
 
     Ok((
         ignore_patterns,
@@ -139,30 +131,6 @@ fn get_ignore_patterns(ignore_patterns_config: &Option<Vec<String>>) -> io::Resu
     }
 
     Ok(String::new())
-}
-
-fn parse_additional_ignore_patterns(args: &[String]) -> Vec<String> {
-    args.iter()
-        .filter_map(|arg| {
-            if arg.starts_with("--ignore=") {
-                Some(arg.strip_prefix("--ignore=").unwrap().to_string())
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-fn get_action(args: &[String], config: &Config) -> Option<String> {
-    if args.contains(&String::from("--copy")) {
-        return Some("copy".to_string());
-    }
-
-    if args.contains(&String::from("--save")) {
-        return Some("save".to_string());
-    }
-
-    config.default.action.clone()
 }
 
 fn process_files(
@@ -243,11 +211,16 @@ fn format_file_content(
 }
 
 fn execute_action(
-    args: &[String],
+    args: &Args,
     config: &Config,
     combined_source_code: String,
 ) -> Result<(), AppError> {
-    if let Some(action) = get_action(args, config) {
+    if args.copy {
+        copy_to_clipboard(combined_source_code)
+    } else if args.save {
+        let output_path = get_output_path(args, config)?;
+        save_to_file(combined_source_code, &output_path)
+    } else if let Some(action) = &config.default.action {
         match action.as_str() {
             "copy" => copy_to_clipboard(combined_source_code),
             "save" => {
@@ -265,14 +238,12 @@ fn execute_action(
     }
 }
 
-fn get_output_path(args: &[String], config: &Config) -> io::Result<PathBuf> {
-    let default_output_path = &config.default.output_path;
+fn get_output_path(args: &Args, config: &Config) -> io::Result<PathBuf> {
+    if let Some(path) = &args.output_path {
+        return Ok(expand_tilde(path));
+    }
 
-    if let Some(path) = args
-        .iter()
-        .find_map(|arg| arg.strip_prefix("--output_path="))
-        .or_else(|| default_output_path.as_deref())
-    {
+    if let Some(path) = &config.default.output_path {
         return Ok(expand_tilde(path));
     }
 
@@ -309,18 +280,6 @@ fn write_combined_code(
 ) -> Result<(), AppError> {
     fs::write(output_file_path, combined_source_code)?;
     Ok(())
-}
-
-fn get_use_relative_paths(args: &[String], config: &Config) -> io::Result<bool> {
-    if args.contains(&String::from("--relative")) {
-        return Ok(true);
-    }
-
-    if args.contains(&String::from("--no-relative")) {
-        return Ok(false);
-    }
-
-    Ok(config.default.use_relative_paths.unwrap_or(true))
 }
 
 fn is_ignored(file_path: &Path, project_dir: &Path, ignore_patterns: &str) -> bool {
