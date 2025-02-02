@@ -1,6 +1,30 @@
 # Project Code Combiner
 
-Project Code Combiner is a command-line tool that combines source code files in a project directory into a single file or copies the combined code to the clipboard. This tool is useful for combining multiple files into a single file for asking questions to AI models or sharing code snippets.
+Project Code Combiner is a command-line tool that combines source code files in a project directory into a single file or copies the combined code to the clipboard. This tool outputs the combined code in XML format, which is useful for AI models that can parse structured data more effectively.
+
+## Output Format
+
+The tool combines source code files into a single XML-formatted output. The output format looks like this:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <file name="src/main.rs">
+    // File contents with proper indentation
+    fn main() {
+        println!("Hello, World!");
+    }
+  </file>
+  <file name="src/lib.rs">
+    // Another file's contents
+    pub fn add(a: i32, b: i32) -> i32 {
+        a + b
+    }
+  </file>
+</project>
+```
+
+This XML format makes it easier for AI models to understand the structure of your project and the relationships between files.
 
 ## Installation
 
