@@ -2,6 +2,7 @@ mod config;
 use clap::Parser;
 use clipboard::{ClipboardContext, ClipboardProvider};
 use config::Config;
+use config::ProcessingOptions;
 use ignore::Walk;
 use regex::Regex;
 use std::env;
@@ -81,16 +82,9 @@ fn main() {
 
 fn run(target_paths: &[PathBuf], args: &Args) -> Result<(), AppError> {
     let config = load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
-    let (ignore_patterns, left_sep, right_sep, use_relative_paths) =
-        get_config_settings(args, &config)?;
+    let options = ProcessingOptions::new(args, &config)?;
 
-    let combined_source_code = process_files(
-        target_paths,
-        &ignore_patterns,
-        &left_sep,
-        &right_sep,
-        use_relative_paths,
-    )?;
+    let combined_source_code = process_files(target_paths, &options)?;
 
     execute_action(args, &config, combined_source_code)
 }
@@ -99,70 +93,21 @@ fn load_config() -> io::Result<Config> {
     Config::load()
 }
 
-fn get_config_settings(args: &Args, config: &Config) -> io::Result<(String, String, String, bool)> {
-    let mut ignore_patterns = get_ignore_patterns(&config.default.ignore_patterns)?;
-    let additional_ignore_patterns = &args.ignore_patterns;
-
-    if !additional_ignore_patterns.is_empty() {
-        if !ignore_patterns.is_empty() {
-            ignore_patterns.push('\n');
-        }
-        ignore_patterns.push_str(&additional_ignore_patterns.join("\n"));
-    }
-
-    let default_sep = "-".repeat(30);
-    let left_sep = &default_sep;
-    let right_sep = &default_sep;
-    let use_relative_paths = args.relative;
-
-    Ok((
-        ignore_patterns,
-        left_sep.to_string(),
-        right_sep.to_string(),
-        use_relative_paths,
-    ))
-}
-
-fn get_ignore_patterns(ignore_patterns_config: &Option<Vec<String>>) -> io::Result<String> {
-    if let Some(patterns) = ignore_patterns_config {
-        if !patterns.is_empty() {
-            return Ok(patterns.join("\n"));
-        }
-    }
-
-    Ok(String::new())
-}
-
 fn process_files(
     target_paths: &[PathBuf],
-    ignore_patterns: &str,
-    left_sep: &str,
-    right_sep: &str,
-    use_relative_paths: bool,
+    options: &ProcessingOptions,
 ) -> Result<String, AppError> {
     let mut combined_source_code = String::new();
 
     for target_path in target_paths {
         if target_path.is_file() {
-            let file_source_code = process_single_file(
-                target_path,
-                ignore_patterns,
-                left_sep,
-                right_sep,
-                use_relative_paths,
-            )?;
+            let file_source_code = process_single_file(target_path, options)?;
             combined_source_code.push_str(&file_source_code);
         } else if target_path.is_dir() {
             for entry in Walk::new(target_path).filter_map(Result::ok) {
                 let path = entry.path();
-                if path.is_file() && !is_ignored(path, target_path, ignore_patterns) {
-                    let file_source_code = process_single_file(
-                        path,
-                        ignore_patterns,
-                        left_sep,
-                        right_sep,
-                        use_relative_paths,
-                    )?;
+                if path.is_file() && !is_ignored(path, target_path, &options.ignore_patterns) {
+                    let file_source_code = process_single_file(path, options)?;
                     combined_source_code.push_str(&file_source_code);
                 }
             }
@@ -174,23 +119,31 @@ fn process_files(
     Ok(combined_source_code)
 }
 
-fn process_single_file(
-    file_path: &Path,
-    ignore_patterns: &str,
-    left_sep: &str,
-    right_sep: &str,
-    use_relative_paths: bool,
-) -> Result<String, AppError> {
-    if is_ignored(file_path, file_path.parent().unwrap(), ignore_patterns) {
+fn process_single_file(file_path: &Path, options: &ProcessingOptions) -> Result<String, AppError> {
+    if is_ignored(
+        file_path,
+        file_path.parent().unwrap(),
+        &options.ignore_patterns,
+    ) {
         return Ok(String::new());
     }
 
     let file_content = fs::read_to_string(file_path)?;
-    let formatted_content = if use_relative_paths {
+    let formatted_content = if options.use_relative_paths {
         let relative_path = file_path.strip_prefix(file_path.parent().unwrap()).unwrap();
-        format_file_content(relative_path, &file_content, left_sep, right_sep)
+        format_file_content(
+            relative_path,
+            &file_content,
+            &options.left_separator,
+            &options.right_separator,
+        )
     } else {
-        format_file_content(file_path, &file_content, left_sep, right_sep)
+        format_file_content(
+            file_path,
+            &file_content,
+            &options.left_separator,
+            &options.right_separator,
+        )
     };
     Ok(formatted_content)
 }
