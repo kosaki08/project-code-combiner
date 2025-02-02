@@ -55,6 +55,24 @@ impl From<io::Error> for AppError {
     }
 }
 
+impl From<Box<dyn std::error::Error>> for AppError {
+    fn from(err: Box<dyn std::error::Error>) -> Self {
+        AppError::ClipboardError(err.to_string())
+    }
+}
+
+impl From<String> for AppError {
+    fn from(err: String) -> Self {
+        AppError::ConfigError(err)
+    }
+}
+
+impl From<&str> for AppError {
+    fn from(err: &str) -> Self {
+        AppError::ConfigError(err.to_string())
+    }
+}
+
 impl std::fmt::Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -81,7 +99,7 @@ fn main() {
 }
 
 fn run(target_paths: &[PathBuf], args: &Args) -> Result<(), AppError> {
-    let config = load_config().map_err(|e| AppError::ConfigError(e.to_string()))?;
+    let config = load_config()?;
     let options = ProcessingOptions::new(args, &config)?;
 
     let combined_source_code = process_files(target_paths, &options)?;
@@ -210,13 +228,8 @@ fn get_output_path(args: &Args, config: &Config) -> io::Result<PathBuf> {
 }
 
 fn copy_to_clipboard(combined_code: String) -> Result<(), AppError> {
-    let mut ctx: ClipboardContext = ClipboardProvider::new().map_err(|err| {
-        AppError::ClipboardError(format!("Failed to create clipboard context: {}", err))
-    })?;
-
-    ctx.set_contents(combined_code)
-        .map_err(|err| AppError::ClipboardError(format!("Failed to copy to clipboard: {}", err)))?;
-
+    let mut ctx: ClipboardContext = ClipboardProvider::new()?;
+    ctx.set_contents(combined_code)?;
     println!("Combined code copied to clipboard.");
     Ok(())
 }
