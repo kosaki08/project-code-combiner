@@ -135,7 +135,7 @@ Here are the available command-line options for customizing the execution:
 | `--version`                 | Displays the version information.                                                                       |
 | `--relative`                | Uses relative paths for file references (default: true).                                                |
 | `--no-relative`             | Uses absolute paths for file references.                                                                |
-| `--resolve-dependencies`    | Resolves and includes dependencies of the target files (Currently supports TypeScript/JavaScript only). |
+| `--deps`                    | Resolves and includes dependencies of the target files (Currently supports TypeScript/JavaScript only). |
 
 ## Examples
 

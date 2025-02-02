@@ -48,7 +48,7 @@ struct Args {
 
     /// Resolve dependencies
     #[arg(long, default_value_t = false)]
-    resolve_dependencies: bool,
+    deps: bool,
 }
 
 #[derive(Debug)]
@@ -133,8 +133,8 @@ fn process_files(
         if target_path.is_file() {
             let mut files_to_process = vec![target_path.to_path_buf()];
 
-            if options.resolve_dependencies && TypeScriptResolver::is_supported_file(target_path) {
-                files_to_process = resolver.resolve_dependencies(target_path, &mut ts_resolver)?;
+            if options.deps && TypeScriptResolver::is_supported_file(target_path) {
+                files_to_process = resolver.resolve_deps(target_path, &mut ts_resolver)?;
             }
 
             for file_path in files_to_process {

@@ -65,7 +65,7 @@ impl DependencyResolver {
         Ok(alias_map)
     }
 
-    pub fn resolve_dependencies<T: LanguageResolver>(
+    pub fn resolve_deps<T: LanguageResolver>(
         &mut self,
         entry_file: &Path,
         resolver: &mut T,
