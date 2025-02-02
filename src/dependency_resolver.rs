@@ -10,7 +10,7 @@ use crate::typescript_resolver::TypeScriptResolver;
 #[derive(Debug)]
 pub struct DependencyResolver {
     base_path: PathBuf,
-    alias_map: HashMap<String, String>,
+    alias_map: Option<HashMap<String, String>>,
     resolved_files: HashSet<PathBuf>,
 }
 
@@ -26,9 +26,13 @@ pub trait LanguageResolver: Any {
 }
 
 impl DependencyResolver {
-    pub fn new(project_root: &Path) -> io::Result<Self> {
-        let tsconfig_path = project_root.join("tsconfig.json");
-        let alias_map = Self::load_tsconfig_aliases(&tsconfig_path)?;
+    pub fn new(project_root: &Path, load_aliases: bool) -> io::Result<Self> {
+        let alias_map = if load_aliases {
+            let tsconfig_path = project_root.join("tsconfig.json");
+            Some(Self::load_tsconfig_aliases(&tsconfig_path)?)
+        } else {
+            None
+        };
 
         Ok(Self {
             base_path: project_root.to_path_buf(),
@@ -74,6 +78,11 @@ impl DependencyResolver {
         let mut resolved_files = Vec::new();
 
         while let Some(current_file) = file_queue.pop() {
+            // Skip if the path contains "node_modules"
+            if should_ignore_file(&current_file) {
+                continue;
+            }
+
             if self.resolved_files.contains(&current_file) {
                 continue;
             }
@@ -86,6 +95,11 @@ impl DependencyResolver {
                     if let Some(resolved_path) =
                         ts_resolver.resolve_import_with_resolver(&import_path, &current_file, self)
                     {
+                        // Skip if the resolved path contains "node_modules"
+                        if should_ignore_file(&resolved_path) {
+                            continue;
+                        }
+
                         if !self.resolved_files.contains(&resolved_path) {
                             file_queue.push(resolved_path);
                         }
@@ -100,11 +114,15 @@ impl DependencyResolver {
         Ok(resolved_files)
     }
 
-    pub fn get_alias_map(&self) -> &HashMap<String, String> {
-        &self.alias_map
+    pub fn get_alias_map(&self) -> Option<&HashMap<String, String>> {
+        self.alias_map.as_ref()
     }
 
     pub fn get_base_path(&self) -> &Path {
         &self.base_path
     }
+}
+
+fn should_ignore_file(path: &Path) -> bool {
+    path.to_string_lossy().contains("node_modules")
 }

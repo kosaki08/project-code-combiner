@@ -126,16 +126,39 @@ fn process_files(
 ) -> Result<String, AppError> {
     let mut combined_source_code =
         String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project>\n");
-    let mut resolver = DependencyResolver::new(&env::current_dir()?)?;
-    let mut ts_resolver = TypeScriptResolver::new();
+
+    let mut resolver = if options.deps {
+        Some(DependencyResolver::new(&env::current_dir()?, true)?)
+    } else {
+        None
+    };
+
+    let mut ts_resolver = if options.deps {
+        Some(TypeScriptResolver::new())
+    } else {
+        None
+    };
 
     for target_path in target_paths {
         if target_path.is_file() {
-            let mut files_to_process = vec![target_path.to_path_buf()];
+            let files_to_process = if options.deps
+                && TypeScriptResolver::is_supported_file(target_path)
+                && resolver.is_some()
+                && ts_resolver.is_some()
+            {
+                let resolved_files = resolver
+                    .as_mut()
+                    .unwrap()
+                    .resolve_deps(target_path, ts_resolver.as_mut().unwrap())?;
 
-            if options.deps && TypeScriptResolver::is_supported_file(target_path) {
-                files_to_process = resolver.resolve_deps(target_path, &mut ts_resolver)?;
-            }
+                // Filter out ignored files from resolved dependencies
+                resolved_files
+                    .into_iter()
+                    .filter(|path| !is_ignored(path, &options.ignore_patterns))
+                    .collect()
+            } else {
+                vec![target_path.to_path_buf()]
+            };
 
             for file_path in files_to_process {
                 let file_source_code = process_single_file(&file_path, options)?;
@@ -144,7 +167,7 @@ fn process_files(
         } else if target_path.is_dir() {
             for entry in Walk::new(target_path).filter_map(Result::ok) {
                 let path = entry.path();
-                if path.is_file() && !is_ignored(path, target_path, &options.ignore_patterns) {
+                if path.is_file() && !is_ignored(path, &options.ignore_patterns) {
                     let file_source_code = process_single_file(path, options)?;
                     combined_source_code.push_str(&file_source_code);
                 }
@@ -159,11 +182,7 @@ fn process_files(
 }
 
 fn process_single_file(file_path: &Path, options: &ProcessingOptions) -> Result<String, AppError> {
-    if is_ignored(
-        file_path,
-        file_path.parent().unwrap(),
-        &options.ignore_patterns,
-    ) {
+    if is_ignored(file_path, &options.ignore_patterns) {
         return Ok(String::new());
     }
 
@@ -259,20 +278,18 @@ fn write_combined_code(
     Ok(())
 }
 
-fn is_ignored(file_path: &Path, project_dir: &Path, ignore_patterns: &str) -> bool {
-    let relative_path = match file_path.strip_prefix(project_dir) {
-        Ok(path) => path,
-        Err(_) => return false,
-    };
-    let relative_path_str = relative_path.to_str().unwrap();
+fn is_ignored(file_path: &Path, ignore_patterns: &str) -> bool {
+    let path_str = file_path.to_string_lossy();
 
     ignore_patterns
         .lines()
         .filter(|line| !line.trim().is_empty())
         .any(|pattern| {
             let regex_pattern = convert_ignore_pattern_to_regex(pattern);
-            let regex = Regex::new(&regex_pattern).unwrap();
-            regex.is_match(relative_path_str)
+            match Regex::new(&regex_pattern) {
+                Ok(regex) => regex.is_match(&path_str),
+                Err(_) => false,
+            }
         })
 }
 
