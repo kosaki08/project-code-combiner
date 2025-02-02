@@ -115,7 +115,8 @@ fn process_files(
     target_paths: &[PathBuf],
     options: &ProcessingOptions,
 ) -> Result<String, AppError> {
-    let mut combined_source_code = String::new();
+    let mut combined_source_code =
+        String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project>\n");
 
     for target_path in target_paths {
         if target_path.is_file() {
@@ -134,6 +135,7 @@ fn process_files(
         }
     }
 
+    combined_source_code.push_str("</project>\n");
     Ok(combined_source_code)
 }
 
@@ -147,37 +149,27 @@ fn process_single_file(file_path: &Path, options: &ProcessingOptions) -> Result<
     }
 
     let file_content = fs::read_to_string(file_path)?;
-    let formatted_content = if options.use_relative_paths {
-        let relative_path = file_path.strip_prefix(file_path.parent().unwrap()).unwrap();
-        format_file_content(
-            relative_path,
-            &file_content,
-            &options.left_separator,
-            &options.right_separator,
-        )
+    let path_to_display = if options.use_relative_paths {
+        match file_path.strip_prefix(env::current_dir()?) {
+            Ok(relative) => relative.to_path_buf(),
+            Err(_) => file_path.to_path_buf(),
+        }
     } else {
-        format_file_content(
-            file_path,
-            &file_content,
-            &options.left_separator,
-            &options.right_separator,
-        )
+        file_path.to_path_buf()
     };
-    Ok(formatted_content)
+
+    Ok(format_file_content(&path_to_display, &file_content))
 }
 
-fn format_file_content(
-    file_path: &Path,
-    file_content: &str,
-    left_sep: &str,
-    right_sep: &str,
-) -> String {
+fn format_file_content(file_path: &Path, file_content: &str) -> String {
     format!(
-        "{}\n{}\n{}\n{}\n",
-        left_sep,
+        "  <file name=\"{}\">\n{}\n  </file>\n",
         file_path.display(),
-        right_sep,
         file_content
+            .lines()
+            .map(|line| format!("    {}", line))
+            .collect::<Vec<_>>()
+            .join("\n")
     )
 }
 

@@ -22,8 +22,6 @@ pub struct Config {
 #[derive(Debug)]
 pub struct ProcessingOptions {
     pub ignore_patterns: String,
-    pub left_separator: String,
-    pub right_separator: String,
     pub use_relative_paths: bool,
 }
 
@@ -68,12 +66,8 @@ impl ProcessingOptions {
             ignore_patterns.push_str(&additional_ignore_patterns.join("\n"));
         }
 
-        let default_sep = "-".repeat(30);
-
         Ok(ProcessingOptions {
             ignore_patterns,
-            left_separator: default_sep.clone(),
-            right_separator: default_sep,
             use_relative_paths: args.relative,
         })
     }
