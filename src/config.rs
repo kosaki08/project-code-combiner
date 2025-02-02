@@ -47,26 +47,34 @@ impl Config {
     }
 }
 
-fn get_ignore_patterns(ignore_patterns_config: &Option<Vec<String>>) -> io::Result<String> {
-    if let Some(patterns) = ignore_patterns_config {
-        if !patterns.is_empty() {
-            return Ok(patterns.join("\n"));
-        }
-    }
-    Ok(String::new())
+fn convert_ignore_patterns(patterns: &[String]) -> String {
+    patterns
+        .iter()
+        .map(|pattern| {
+            if pattern.ends_with('/') {
+                format!("{}**/*", pattern)
+            } else {
+                pattern.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 impl ProcessingOptions {
     pub fn new(args: &Args, config: &Config) -> io::Result<Self> {
-        let mut ignore_patterns = get_ignore_patterns(&config.default.ignore_patterns)?;
-        let additional_ignore_patterns = &args.ignore_patterns;
+        let mut patterns = Vec::new();
 
-        if !additional_ignore_patterns.is_empty() {
-            if !ignore_patterns.is_empty() {
-                ignore_patterns.push('\n');
-            }
-            ignore_patterns.push_str(&additional_ignore_patterns.join("\n"));
+        // First, apply patterns from the config file
+        if let Some(config_patterns) = &config.default.ignore_patterns {
+            patterns.extend(config_patterns.clone());
         }
+
+        // Command line patterns can override config file patterns
+        patterns.extend(args.ignore_patterns.clone());
+
+        // Convert patterns to proper ignore format
+        let ignore_patterns = convert_ignore_patterns(&patterns);
 
         Ok(ProcessingOptions {
             ignore_patterns,

@@ -146,10 +146,19 @@ fn process_files(
                 && resolver.is_some()
                 && ts_resolver.is_some()
             {
-                resolver
+                let resolved_files = resolver
                     .as_mut()
                     .unwrap()
-                    .resolve_deps(target_path, ts_resolver.as_mut().unwrap())?
+                    .resolve_deps(target_path, ts_resolver.as_mut().unwrap())?;
+
+                // Filter out ignored files from resolved dependencies
+                resolved_files
+                    .into_iter()
+                    .filter(|path| {
+                        let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from(""));
+                        !is_ignored(path, &current_dir, &options.ignore_patterns)
+                    })
+                    .collect()
             } else {
                 vec![target_path.to_path_buf()]
             };

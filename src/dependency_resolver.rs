@@ -78,6 +78,11 @@ impl DependencyResolver {
         let mut resolved_files = Vec::new();
 
         while let Some(current_file) = file_queue.pop() {
+            // Skip if the path contains "node_modules"
+            if should_ignore_file(&current_file) {
+                continue;
+            }
+
             if self.resolved_files.contains(&current_file) {
                 continue;
             }
@@ -90,6 +95,11 @@ impl DependencyResolver {
                     if let Some(resolved_path) =
                         ts_resolver.resolve_import_with_resolver(&import_path, &current_file, self)
                     {
+                        // Skip if the resolved path contains "node_modules"
+                        if should_ignore_file(&resolved_path) {
+                            continue;
+                        }
+
                         if !self.resolved_files.contains(&resolved_path) {
                             file_queue.push(resolved_path);
                         }
@@ -111,4 +121,8 @@ impl DependencyResolver {
     pub fn get_base_path(&self) -> &Path {
         &self.base_path
     }
+}
+
+fn should_ignore_file(path: &Path) -> bool {
+    path.to_string_lossy().contains("node_modules")
 }
