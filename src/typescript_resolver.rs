@@ -95,7 +95,9 @@ impl TypeScriptResolver {
     ) -> Option<PathBuf> {
         let resolved_path = self.resolve_with_alias(
             import_path,
-            dependency_resolver.get_alias_map(),
+            dependency_resolver
+                .get_alias_map()
+                .unwrap_or(&HashMap::new()),
             dependency_resolver.get_base_path(),
         )?;
 

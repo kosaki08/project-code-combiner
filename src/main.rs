@@ -126,16 +126,33 @@ fn process_files(
 ) -> Result<String, AppError> {
     let mut combined_source_code =
         String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project>\n");
-    let mut resolver = DependencyResolver::new(&env::current_dir()?)?;
-    let mut ts_resolver = TypeScriptResolver::new();
+
+    let mut resolver = if options.deps {
+        Some(DependencyResolver::new(&env::current_dir()?, true)?)
+    } else {
+        None
+    };
+
+    let mut ts_resolver = if options.deps {
+        Some(TypeScriptResolver::new())
+    } else {
+        None
+    };
 
     for target_path in target_paths {
         if target_path.is_file() {
-            let mut files_to_process = vec![target_path.to_path_buf()];
-
-            if options.deps && TypeScriptResolver::is_supported_file(target_path) {
-                files_to_process = resolver.resolve_deps(target_path, &mut ts_resolver)?;
-            }
+            let files_to_process = if options.deps
+                && TypeScriptResolver::is_supported_file(target_path)
+                && resolver.is_some()
+                && ts_resolver.is_some()
+            {
+                resolver
+                    .as_mut()
+                    .unwrap()
+                    .resolve_deps(target_path, ts_resolver.as_mut().unwrap())?
+            } else {
+                vec![target_path.to_path_buf()]
+            };
 
             for file_path in files_to_process {
                 let file_source_code = process_single_file(&file_path, options)?;

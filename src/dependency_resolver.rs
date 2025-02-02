@@ -10,7 +10,7 @@ use crate::typescript_resolver::TypeScriptResolver;
 #[derive(Debug)]
 pub struct DependencyResolver {
     base_path: PathBuf,
-    alias_map: HashMap<String, String>,
+    alias_map: Option<HashMap<String, String>>,
     resolved_files: HashSet<PathBuf>,
 }
 
@@ -26,9 +26,13 @@ pub trait LanguageResolver: Any {
 }
 
 impl DependencyResolver {
-    pub fn new(project_root: &Path) -> io::Result<Self> {
-        let tsconfig_path = project_root.join("tsconfig.json");
-        let alias_map = Self::load_tsconfig_aliases(&tsconfig_path)?;
+    pub fn new(project_root: &Path, load_aliases: bool) -> io::Result<Self> {
+        let alias_map = if load_aliases {
+            let tsconfig_path = project_root.join("tsconfig.json");
+            Some(Self::load_tsconfig_aliases(&tsconfig_path)?)
+        } else {
+            None
+        };
 
         Ok(Self {
             base_path: project_root.to_path_buf(),
@@ -100,8 +104,8 @@ impl DependencyResolver {
         Ok(resolved_files)
     }
 
-    pub fn get_alias_map(&self) -> &HashMap<String, String> {
-        &self.alias_map
+    pub fn get_alias_map(&self) -> Option<&HashMap<String, String>> {
+        self.alias_map.as_ref()
     }
 
     pub fn get_base_path(&self) -> &Path {
