@@ -12,6 +12,7 @@ pub struct Default {
     pub output_file_name: Option<String>,
     pub ignore_patterns: Option<Vec<String>>,
     pub use_relative_paths: Option<bool>,
+    pub deps: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -23,6 +24,7 @@ pub struct Config {
 pub struct ProcessingOptions {
     pub ignore_patterns: String,
     pub use_relative_paths: bool,
+    pub deps: bool,
 }
 
 impl Config {
@@ -69,6 +71,7 @@ impl ProcessingOptions {
         Ok(ProcessingOptions {
             ignore_patterns,
             use_relative_paths: args.relative,
+            deps: args.deps || config.default.deps.unwrap_or(false),
         })
     }
 }

@@ -124,17 +124,18 @@ You can include options to override the default behavior specified in the config
 
 Here are the available command-line options for customizing the execution:
 
-| Option                      | Description                                                                                       |
-| --------------------------- | ------------------------------------------------------------------------------------------------- |
-| `--copy`                    | Copies the combined source code to the clipboard instead of saving it to a file.                  |
-| `--save`                    | Saves the combined source code to a file. File output destinations can override default settings. |
-| `--output_path=<PATH>`      | Specifies the output file path for the combined source code.                                      |
-| `--ignore_file_path=<PATH>` | Specifies the ignore file path in .gitignore format.                                              |
-| `--ignore=<PATTERN>`        | Adds an additional ignore pattern (can be used multiple times).                                   |
-| `--help`                    | Displays the help message.                                                                        |
-| `--version`                 | Displays the version information.                                                                 |
-| `--relative`                | Uses relative paths for file references (default: true).                                          |
-| `--no-relative`             | Uses absolute paths for file references.                                                          |
+| Option                      | Description                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `--copy`                    | Copies the combined source code to the clipboard instead of saving it to a file.                        |
+| `--save`                    | Saves the combined source code to a file. File output destinations can override default settings.       |
+| `--output_path=<PATH>`      | Specifies the output file path for the combined source code.                                            |
+| `--ignore_file_path=<PATH>` | Specifies the ignore file path in .gitignore format.                                                    |
+| `--ignore=<PATTERN>`        | Adds an additional ignore pattern (can be used multiple times).                                         |
+| `--help`                    | Displays the help message.                                                                              |
+| `--version`                 | Displays the version information.                                                                       |
+| `--relative`                | Uses relative paths for file references (default: true).                                                |
+| `--no-relative`             | Uses absolute paths for file references.                                                                |
+| `--deps`                    | Resolves and includes dependencies of the target files (Currently supports TypeScript/JavaScript only). |
 
 ## Examples
 
@@ -201,6 +202,29 @@ $ pcc </path/to/project> --no-relative
 ```
 
 This command processes the files and uses absolute paths for file references in the combined source code.
+
+### Including Dependencies (Currently supports TypeScript/JavaScript only):
+
+```bash
+$ pcc </path/to/typescript/file> --resolve-dependencies
+```
+
+This command processes the specified TypeScript/JavaScript file and automatically includes all its dependencies (imported files) in the output. This is particularly useful when you want to include all related files that are necessary for understanding the codebase.
+
+For example, if your entry file imports types or functions from other files:
+
+```typescript
+import { UserType } from "~/types/user";
+import { formatDate } from "@/utils/date";
+```
+
+The tool will automatically resolve and include these imported files in the output. It supports:
+
+- Relative imports (e.g., `./utils/helper`)
+- Absolute imports with tilde (e.g., `~/types/user`)
+- TypeScript path aliases (configured in tsconfig.json)
+
+The dependency resolution follows TypeScript's module resolution rules and supports `.ts`, `.tsx`, `.js`, and `.jsx` files.
 
 ## Building from Source
 

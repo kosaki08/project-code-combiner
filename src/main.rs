@@ -1,4 +1,9 @@
 mod config;
+mod dependency_resolver;
+mod typescript_resolver;
+
+use crate::dependency_resolver::DependencyResolver;
+use crate::typescript_resolver::TypeScriptResolver;
 use clap::Parser;
 use clipboard::{ClipboardContext, ClipboardProvider};
 use config::Config;
@@ -40,6 +45,10 @@ struct Args {
     /// Use relative paths
     #[arg(long, default_value_t = true)]
     relative: bool,
+
+    /// Resolve dependencies
+    #[arg(long, default_value_t = false)]
+    deps: bool,
 }
 
 #[derive(Debug)]
@@ -117,11 +126,21 @@ fn process_files(
 ) -> Result<String, AppError> {
     let mut combined_source_code =
         String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project>\n");
+    let mut resolver = DependencyResolver::new(&env::current_dir()?)?;
+    let mut ts_resolver = TypeScriptResolver::new();
 
     for target_path in target_paths {
         if target_path.is_file() {
-            let file_source_code = process_single_file(target_path, options)?;
-            combined_source_code.push_str(&file_source_code);
+            let mut files_to_process = vec![target_path.to_path_buf()];
+
+            if options.deps && TypeScriptResolver::is_supported_file(target_path) {
+                files_to_process = resolver.resolve_deps(target_path, &mut ts_resolver)?;
+            }
+
+            for file_path in files_to_process {
+                let file_source_code = process_single_file(&file_path, options)?;
+                combined_source_code.push_str(&file_source_code);
+            }
         } else if target_path.is_dir() {
             for entry in Walk::new(target_path).filter_map(Result::ok) {
                 let path = entry.path();
