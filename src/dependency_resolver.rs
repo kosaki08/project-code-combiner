@@ -28,8 +28,10 @@ pub trait LanguageResolver: Any {
 impl DependencyResolver {
     pub fn new(project_root: &Path, load_aliases: bool) -> io::Result<Self> {
         let alias_map = if load_aliases {
-            let tsconfig_path = project_root.join("tsconfig.json");
-            Some(Self::load_tsconfig_aliases(&tsconfig_path)?)
+            match Self::load_tsconfig_aliases(&project_root.join("tsconfig.json")) {
+                Ok(aliases) => Some(aliases),
+                Err(_) => None,
+            }
         } else {
             None
         };
@@ -42,31 +44,39 @@ impl DependencyResolver {
     }
 
     fn load_tsconfig_aliases(tsconfig_path: &Path) -> io::Result<HashMap<String, String>> {
-        let mut alias_map = HashMap::new();
+        if !tsconfig_path.exists() {
+            return Ok(HashMap::new());
+        }
 
-        if tsconfig_path.exists() {
-            let content = fs::read_to_string(tsconfig_path)?;
-            let config: Value = serde_json::from_str(&content)?;
+        let content = fs::read_to_string(tsconfig_path)?;
 
-            if let Some(compiler_options) = config.get("compilerOptions") {
-                if let Some(paths) = compiler_options.get("paths") {
-                    if let Some(paths_obj) = paths.as_object() {
-                        for (alias, targets) in paths_obj {
-                            if let Some(target) = targets.get(0) {
-                                if let Some(target_str) = target.as_str() {
-                                    let clean_alias = alias.trim_end_matches("/*");
-                                    let clean_target = target_str.trim_end_matches("/*");
-                                    alias_map
-                                        .insert(clean_alias.to_string(), clean_target.to_string());
+        match serde_json::from_str::<Value>(&content) {
+            Ok(config) => {
+                let mut alias_map = HashMap::new();
+
+                if let Some(compiler_options) = config.get("compilerOptions") {
+                    if let Some(paths) = compiler_options.get("paths") {
+                        if let Some(paths_obj) = paths.as_object() {
+                            for (alias, targets) in paths_obj {
+                                if let Some(target) = targets.get(0) {
+                                    if let Some(target_str) = target.as_str() {
+                                        let clean_alias = alias.trim_end_matches("/*");
+                                        let clean_target = target_str.trim_end_matches("/*");
+                                        alias_map.insert(
+                                            clean_alias.to_string(),
+                                            clean_target.to_string(),
+                                        );
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-        }
 
-        Ok(alias_map)
+                Ok(alias_map)
+            }
+            Err(_) => Ok(HashMap::new()),
+        }
     }
 
     pub fn resolve_deps<T: LanguageResolver>(
