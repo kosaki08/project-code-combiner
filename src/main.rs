@@ -10,6 +10,8 @@ use config::Config;
 use config::ProcessingOptions;
 use ignore::Walk;
 use regex::Regex;
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::io;
@@ -19,7 +21,7 @@ use std::path::{Path, PathBuf};
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Target files or directories to process
-    #[arg(required = true)]
+    #[arg(required = false)]
     targets: Vec<PathBuf>,
 
     /// Copy the combined code to clipboard
@@ -49,6 +51,14 @@ struct Args {
     /// Resolve dependencies
     #[arg(long, default_value_t = false)]
     deps: bool,
+
+    /// Target files to be modified
+    #[arg(long = "target")]
+    target_files: Vec<PathBuf>,
+
+    /// Reference files for context
+    #[arg(long = "reference")]
+    reference_files: Vec<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -92,16 +102,102 @@ impl std::fmt::Display for AppError {
     }
 }
 
+// Add new struct to track processed files and dependencies
+struct FileProcessor {
+    processed_files: HashSet<PathBuf>,
+    dependency_map: HashMap<PathBuf, HashSet<PathBuf>>,
+    combined_source_code: String,
+}
+
+impl FileProcessor {
+    fn new() -> Self {
+        Self {
+            processed_files: HashSet::new(),
+            dependency_map: HashMap::new(),
+            combined_source_code: String::from(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project>\n",
+            ),
+        }
+    }
+
+    // Process a single file and its dependencies
+    fn process_file_with_deps(
+        &mut self,
+        file_path: &Path,
+        options: &ProcessingOptions,
+        deps_resolver: &mut DependencyResolver,
+        ts_resolver: &mut TypeScriptResolver,
+    ) -> Result<(), AppError> {
+        // Skip if already processed
+        if self.processed_files.contains(file_path) {
+            return Ok(());
+        }
+
+        // Process main file
+        let file_source_code = process_single_file(file_path, options)?;
+        self.combined_source_code.push_str(&file_source_code);
+        self.processed_files.insert(file_path.to_path_buf());
+
+        // Process dependencies
+        let resolved_files = deps_resolver.resolve_deps(file_path, ts_resolver)?;
+
+        for dep_file in resolved_files {
+            if !is_ignored(&dep_file, &options.ignore_patterns) && &dep_file != file_path {
+                let all_importers = deps_resolver.get_all_importers(&dep_file);
+                self.dependency_map.insert(dep_file, all_importers);
+            }
+        }
+
+        Ok(())
+    }
+
+    // Add dependencies section to output
+    fn add_dependencies_section(&mut self, options: &ProcessingOptions) -> Result<(), AppError> {
+        if !self.dependency_map.is_empty() {
+            self.combined_source_code.push_str("  <dependencies>\n");
+
+            // Sort dependencies to ensure consistent output
+            let mut deps: Vec<_> = self.dependency_map.iter().collect();
+            deps.sort_by(|a, b| a.0.cmp(b.0));
+
+            for (dep_file, importers) in deps {
+                // Skip if already processed in main section
+                if !self.processed_files.contains(dep_file) {
+                    let mut file_source_code =
+                        process_single_file_with_importers(dep_file, options, importers)?;
+                    // Add additional indentation for dependencies section
+                    file_source_code = file_source_code
+                        .lines()
+                        .map(|line| format!("  {}", line))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    self.combined_source_code.push_str(&file_source_code);
+                    self.combined_source_code.push('\n');
+                    self.processed_files.insert(dep_file.clone());
+                }
+            }
+            self.combined_source_code.push_str("  </dependencies>\n");
+        }
+
+        Ok(())
+    }
+
+    // Finalize and return the combined source code
+    fn finalize(mut self) -> String {
+        self.combined_source_code.push_str("</project>\n");
+        self.combined_source_code
+    }
+}
+
 fn main() {
     let args = Args::parse();
 
-    let target_paths = args.targets.clone();
-    if target_paths.is_empty() {
-        eprintln!("Error: No target files or directories specified.");
+    if args.targets.is_empty() && args.target_files.is_empty() && args.reference_files.is_empty() {
+        eprintln!("Error: Either <TARGETS> or --target/--reference must be specified.");
         std::process::exit(1);
     }
 
-    match run(&target_paths, &args) {
+    match run(&args.targets, &args) {
         Ok(()) => println!("Project code combined successfully."),
         Err(err) => eprintln!("Error: {}", err),
     }
@@ -124,9 +220,31 @@ fn process_files(
     target_paths: &[PathBuf],
     options: &ProcessingOptions,
 ) -> Result<String, AppError> {
-    let mut combined_source_code =
-        String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project>\n");
+    let mut processor = FileProcessor::new();
 
+    // Process target files
+    if !options.target_files.is_empty() {
+        processor.combined_source_code.push_str("  <targets>\n");
+        for file_path in &options.target_files {
+            let file_source_code = process_single_file(file_path, options)?;
+            processor.combined_source_code.push_str(&file_source_code);
+            processor.processed_files.insert(file_path.clone());
+        }
+        processor.combined_source_code.push_str("  </targets>\n");
+    }
+
+    // Process reference files
+    if !options.reference_files.is_empty() {
+        processor.combined_source_code.push_str("  <references>\n");
+        for file_path in &options.reference_files {
+            let file_source_code = process_single_file(file_path, options)?;
+            processor.combined_source_code.push_str(&file_source_code);
+            processor.processed_files.insert(file_path.clone());
+        }
+        processor.combined_source_code.push_str("  </references>\n");
+    }
+
+    // Initialize resolvers
     let mut resolver = if options.deps {
         Some(DependencyResolver::new(&env::current_dir()?, true)?)
     } else {
@@ -139,46 +257,111 @@ fn process_files(
         None
     };
 
+    // Process main files and their dependencies
     for target_path in target_paths {
         if target_path.is_file() {
-            let files_to_process = if options.deps
+            if options.target_files.contains(target_path)
+                || options.reference_files.contains(target_path)
+            {
+                continue;
+            }
+
+            if options.deps
                 && TypeScriptResolver::is_supported_file(target_path)
                 && resolver.is_some()
                 && ts_resolver.is_some()
             {
-                let resolved_files = resolver
-                    .as_mut()
-                    .unwrap()
-                    .resolve_deps(target_path, ts_resolver.as_mut().unwrap())?;
-
-                // Filter out ignored files from resolved dependencies
-                resolved_files
-                    .into_iter()
-                    .filter(|path| !is_ignored(path, &options.ignore_patterns))
-                    .collect()
+                processor.process_file_with_deps(
+                    target_path,
+                    options,
+                    resolver.as_mut().unwrap(),
+                    ts_resolver.as_mut().unwrap(),
+                )?;
             } else {
-                vec![target_path.to_path_buf()]
-            };
-
-            for file_path in files_to_process {
-                let file_source_code = process_single_file(&file_path, options)?;
-                combined_source_code.push_str(&file_source_code);
+                let file_source_code = process_single_file(target_path, options)?;
+                processor.combined_source_code.push_str(&file_source_code);
+                processor.processed_files.insert(target_path.to_path_buf());
             }
         } else if target_path.is_dir() {
             for entry in Walk::new(target_path).filter_map(Result::ok) {
                 let path = entry.path();
-                if path.is_file() && !is_ignored(path, &options.ignore_patterns) {
-                    let file_source_code = process_single_file(path, options)?;
-                    combined_source_code.push_str(&file_source_code);
+                if path.is_file()
+                    && !is_ignored(path, &options.ignore_patterns)
+                    && !options.target_files.contains(&path.to_path_buf())
+                    && !options.reference_files.contains(&path.to_path_buf())
+                    && !processor.processed_files.contains(path)
+                {
+                    if options.deps
+                        && TypeScriptResolver::is_supported_file(path)
+                        && resolver.is_some()
+                        && ts_resolver.is_some()
+                    {
+                        processor.process_file_with_deps(
+                            path,
+                            options,
+                            resolver.as_mut().unwrap(),
+                            ts_resolver.as_mut().unwrap(),
+                        )?;
+                    } else {
+                        let file_source_code = process_single_file(path, options)?;
+                        processor.combined_source_code.push_str(&file_source_code);
+                        processor.processed_files.insert(path.to_path_buf());
+                    }
                 }
             }
-        } else {
-            eprintln!("Warning: Skipping invalid path: {}", target_path.display());
         }
     }
 
-    combined_source_code.push_str("</project>\n");
-    Ok(combined_source_code)
+    // Add dependencies section
+    processor.add_dependencies_section(options)?;
+
+    Ok(processor.finalize())
+}
+
+fn process_single_file_with_importers(
+    file_path: &Path,
+    options: &ProcessingOptions,
+    importers: &HashSet<PathBuf>,
+) -> Result<String, AppError> {
+    if is_ignored(file_path, &options.ignore_patterns) {
+        return Ok(String::new());
+    }
+
+    let file_content = fs::read_to_string(file_path)?;
+    let path_to_display = if options.use_relative_paths {
+        match file_path.strip_prefix(env::current_dir()?) {
+            Ok(relative) => relative.to_path_buf(),
+            Err(_) => file_path.to_path_buf(),
+        }
+    } else {
+        file_path.to_path_buf()
+    };
+
+    let mut output = format!("  <file name=\"{}\">\n", path_to_display.display());
+
+    // Add importers section
+    if !importers.is_empty() {
+        output.push_str("    <imported_by>\n");
+        for importer in importers {
+            output.push_str(&format!(
+                "      <importer>{}</importer>\n",
+                importer.display()
+            ));
+        }
+        output.push_str("    </imported_by>\n");
+    }
+
+    // Add file content
+    output.push_str(
+        &file_content
+            .lines()
+            .map(|line| format!("    {}", line))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    output.push_str("\n  </file>\n");
+
+    Ok(output)
 }
 
 fn process_single_file(file_path: &Path, options: &ProcessingOptions) -> Result<String, AppError> {

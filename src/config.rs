@@ -25,6 +25,8 @@ pub struct ProcessingOptions {
     pub ignore_patterns: String,
     pub use_relative_paths: bool,
     pub deps: bool,
+    pub target_files: Vec<PathBuf>,
+    pub reference_files: Vec<PathBuf>,
 }
 
 impl Config {
@@ -80,6 +82,8 @@ impl ProcessingOptions {
             ignore_patterns,
             use_relative_paths: args.relative,
             deps: args.deps || config.default.deps.unwrap_or(false),
+            target_files: args.target_files.clone(),
+            reference_files: args.reference_files.clone(),
         })
     }
 }

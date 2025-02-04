@@ -1,9 +1,5 @@
 [default]
 action = "copy"
-output_path = "~/Desktop/Projects/your-project/dist/combined_code.txt"
-output_file_name = "combined_code.txt"
-left_sep = "-------------------------"
-right_sep = "-------------------------"
 use_relative_paths = true
 ignore_patterns = [
   ".DS_Store",
