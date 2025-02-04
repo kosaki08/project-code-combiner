@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Target files or directories to process
-    #[arg(required = true)]
+    #[arg(required = false)]
     targets: Vec<PathBuf>,
 
     /// Copy the combined code to clipboard
@@ -49,6 +49,14 @@ struct Args {
     /// Resolve dependencies
     #[arg(long, default_value_t = false)]
     deps: bool,
+
+    /// Target files to be modified
+    #[arg(long = "target")]
+    target_files: Vec<PathBuf>,
+
+    /// Reference files for context
+    #[arg(long = "reference")]
+    reference_files: Vec<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -95,13 +103,12 @@ impl std::fmt::Display for AppError {
 fn main() {
     let args = Args::parse();
 
-    let target_paths = args.targets.clone();
-    if target_paths.is_empty() {
-        eprintln!("Error: No target files or directories specified.");
+    if args.targets.is_empty() && args.target_files.is_empty() && args.reference_files.is_empty() {
+        eprintln!("Error: Either <TARGETS> or --target/--reference must be specified.");
         std::process::exit(1);
     }
 
-    match run(&target_paths, &args) {
+    match run(&args.targets, &args) {
         Ok(()) => println!("Project code combined successfully."),
         Err(err) => eprintln!("Error: {}", err),
     }
@@ -127,6 +134,27 @@ fn process_files(
     let mut combined_source_code =
         String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project>\n");
 
+    // Target files processing
+    if !options.target_files.is_empty() {
+        combined_source_code.push_str("  <targets>\n");
+        for file_path in &options.target_files {
+            let file_source_code = process_single_file(file_path, options)?;
+            combined_source_code.push_str(&file_source_code);
+        }
+        combined_source_code.push_str("  </targets>\n");
+    }
+
+    // Reference files processing
+    if !options.reference_files.is_empty() {
+        combined_source_code.push_str("  <references>\n");
+        for file_path in &options.reference_files {
+            let file_source_code = process_single_file(file_path, options)?;
+            combined_source_code.push_str(&file_source_code);
+        }
+        combined_source_code.push_str("  </references>\n");
+    }
+
+    // Other files processing
     let mut resolver = if options.deps {
         Some(DependencyResolver::new(&env::current_dir()?, true)?)
     } else {
@@ -141,6 +169,13 @@ fn process_files(
 
     for target_path in target_paths {
         if target_path.is_file() {
+            // If the target or reference file has already been processed, skip it
+            if options.target_files.contains(target_path)
+                || options.reference_files.contains(target_path)
+            {
+                continue;
+            }
+
             let files_to_process = if options.deps
                 && TypeScriptResolver::is_supported_file(target_path)
                 && resolver.is_some()
@@ -151,7 +186,6 @@ fn process_files(
                     .unwrap()
                     .resolve_deps(target_path, ts_resolver.as_mut().unwrap())?;
 
-                // Filter out ignored files from resolved dependencies
                 resolved_files
                     .into_iter()
                     .filter(|path| !is_ignored(path, &options.ignore_patterns))
@@ -167,13 +201,15 @@ fn process_files(
         } else if target_path.is_dir() {
             for entry in Walk::new(target_path).filter_map(Result::ok) {
                 let path = entry.path();
-                if path.is_file() && !is_ignored(path, &options.ignore_patterns) {
+                if path.is_file()
+                    && !is_ignored(path, &options.ignore_patterns)
+                    && !options.target_files.contains(&path.to_path_buf())
+                    && !options.reference_files.contains(&path.to_path_buf())
+                {
                     let file_source_code = process_single_file(path, options)?;
                     combined_source_code.push_str(&file_source_code);
                 }
             }
-        } else {
-            eprintln!("Warning: Skipping invalid path: {}", target_path.display());
         }
     }
 

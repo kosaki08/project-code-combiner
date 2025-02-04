@@ -136,16 +136,54 @@ Here are the available command-line options for customizing the execution:
 | `--relative`                | Uses relative paths for file references (default: true).                                                |
 | `--no-relative`             | Uses absolute paths for file references.                                                                |
 | `--deps`                    | Resolves and includes dependencies of the target files (Currently supports TypeScript/JavaScript only). |
-
-## Examples
+| `--target=<PATH>`           | Specifies files to be included in the `<targets>` section (can be used multiple times).                 |
+| `--reference=<PATH>`        | Specifies files to be included in the `<references>` section (can be used multiple times).              |
 
 ### Basic Usage:
 
+`You can combine files in two ways:
+
+1. Using path arguments - combines all files with simple `<file>` tags:
+
 ```bash
-$ pcc </path/to/project> [OPTIONS]
+$ pcc path/to/files
 ```
 
-This command processes the files in the specified project directory and performs the default actions (copy to clipboard or save to file) listed in the configuration file `.pcc_config.toml`. Override the default action if the following options are given.
+2. Using --target and --reference - separates files into sections for editing and context:
+
+```bash
+$ pcc --target main.rs --reference lib.rs
+```
+
+When using --target or --reference, the output looks like this:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <targets>
+    <file name="main.rs">
+      // Files you want to edit
+    </file>
+  </targets>
+  <references>
+    <file name="lib.rs">
+      // Files for context
+    </file>
+  </references>
+</project>
+```
+
+You can combine these with other options:
+
+```bash
+# Using path with copy to clipboard
+$ pcc path/to/files --copy
+
+# Using target/reference with dependency resolution
+$ pcc --target main.ts --reference utils.ts --deps
+```
+
+Note: You must specify either file paths or --target/--reference options. The tool will exit with an error if no files are specified.
 
 ### Using Clipboard:
 
