@@ -244,25 +244,69 @@ This command processes the files and uses absolute paths for file references in 
 ### Including Dependencies (Currently supports TypeScript/JavaScript only):
 
 ```bash
-$ pcc </path/to/typescript/file> --resolve-dependencies
+$ pcc </path/to/typescript/file> --deps
 ```
 
-This command processes the specified TypeScript/JavaScript file and automatically includes all its dependencies (imported files) in the output. This is particularly useful when you want to include all related files that are necessary for understanding the codebase.
+This command processes the specified TypeScript/JavaScript file and automatically includes all its dependencies (imported files) in the output. The output will be structured like this:
 
-For example, if your entry file imports types or functions from other files:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <targets>
+    <file name="src/components/App.tsx">
+      import { Button } from './Button';
+      import { useTheme } from '../hooks/useTheme';
 
-```typescript
-import { UserType } from "~/types/user";
-import { formatDate } from "@/utils/date";
+      export function App() {
+        const theme = useTheme();
+        return <Button>Click me</Button>;
+      }
+    </file>
+  </targets>
+  <dependencies>
+    <file name="src/components/Button.tsx">
+      <imported_by>
+        <importer>src/components/App.tsx</importer>
+      </imported_by>
+      import { styled } from '@mui/material/styles';
+
+      export const Button = styled('button')`
+        background: ${props => props.theme.primary};
+      `;
+    </file>
+    <file name="src/hooks/useTheme.ts">
+      <imported_by>
+        <importer>src/components/App.tsx</importer>
+        <importer>src/components/Button.tsx</importer>
+      </imported_by>
+      export const useTheme = () => {
+        // Theme implementation
+      };
+    </file>
+  </dependencies>
+</project>
 ```
 
-The tool will automatically resolve and include these imported files in the output. It supports:
+The dependency resolution:
 
-- Relative imports (e.g., `./utils/helper`)
-- Absolute imports with tilde (e.g., `~/types/user`)
-- TypeScript path aliases (configured in tsconfig.json)
+1. Automatically tracks both direct and indirect dependencies
+2. Detects and handles circular dependencies
+3. Shows all importers (both direct and indirect) in the `<imported_by>` section
+4. Supports various import patterns:
+   - Relative imports (e.g., `./components/Button`)
+   - Absolute imports with path aliases (configured in tsconfig.json)
+   - Node module imports
+   - TypeScript/JavaScript extensions (.ts, .tsx, .js, .jsx)
 
-The dependency resolution follows TypeScript's module resolution rules and supports `.ts`, `.tsx`, `.js`, and `.jsx` files.
+Example with multiple entry points:
+
+```bash
+$ pcc --target src/pages/Home.tsx --target src/pages/About.tsx --deps
+```
+
+This will include all dependencies from both entry points, with the `<imported_by>` section showing all files that import each dependency.
+
+Note: The tool automatically skips node_modules and handles circular dependencies gracefully, showing a warning when detected.
 
 ## Building from Source
 
