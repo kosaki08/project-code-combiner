@@ -479,6 +479,10 @@ fn is_ignored(file_path: &Path, ignore_patterns: &str) -> bool {
 fn convert_ignore_pattern_to_regex(pattern: &str) -> String {
     let mut regex_pattern = String::new();
 
+    if pattern.ends_with('/') {
+        regex_pattern.push_str(".*");
+    }
+
     let mut in_bracket = false;
     for c in pattern.chars() {
         match c {
@@ -499,7 +503,11 @@ fn convert_ignore_pattern_to_regex(pattern: &str) -> String {
         }
     }
 
-    format!("^{}$", regex_pattern)
+    if !pattern.contains('/') {
+        format!("(?:^|.*/){}$", regex_pattern)
+    } else {
+        format!("^{}$", regex_pattern)
+    }
 }
 
 fn expand_tilde(path: &str) -> PathBuf {

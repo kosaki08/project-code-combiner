@@ -1,8 +1,8 @@
 [package]
 name = "pcc"
-version = "0.6.3"
+version = "0.6.4"
 edition = "2021"
-description = "A simple command line tool that combines source code files in a project directory into a single file or copy to clipboard."
+description = "A command-line tool that combines project source code files into structured XML output, with support for file targeting, dependency resolution, and clipboard integration."
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/kosaki08/project-code-combiner"
