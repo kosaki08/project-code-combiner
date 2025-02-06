@@ -32,10 +32,9 @@ impl TypeScriptResolver {
         let import_query = Query::new(
             language,
             r#"
-            (import_statement
-                source: (string) @import_path)
-            (import_require_clause
-                source: (string) @import_path)
+            (import_statement source: (string) @import_path)
+            (import_require_clause source: (string) @import_path)
+            (export_statement source: (string) @import_path)
             "#,
         )
         .unwrap();
@@ -68,7 +67,7 @@ impl TypeScriptResolver {
             let without_tilde = import_path.strip_prefix('~').unwrap();
             let path = without_tilde.trim_start_matches('/');
             if !path.contains('.') {
-                return Some(format!("{}.ts", path));
+                return Some(path.to_string());
             }
             return Some(path.to_string());
         }
@@ -123,8 +122,27 @@ impl TypeScriptResolver {
             let direct_path = src_dir.join(&resolved_path);
 
             if direct_path.exists() {
-                Some(direct_path)
+                if direct_path.is_dir() {
+                    let index_extensions = [".tsx", ".ts", ".jsx", ".js"];
+                    for ext in index_extensions.iter() {
+                        let index_file = direct_path.join(format!("index{}", ext));
+                        if index_file.exists() {
+                            return Some(index_file);
+                        }
+                    }
+                    None
+                } else {
+                    Some(direct_path)
+                }
             } else {
+                let extensions = [".tsx", ".ts", ".jsx", ".js"];
+                for ext in extensions.iter() {
+                    let file_with_ext = direct_path.with_extension(&ext[1..]);
+                    if file_with_ext.exists() {
+                        return Some(file_with_ext);
+                    }
+                }
+
                 self.resolver
                     .resolve(&src_dir, &resolved_path)
                     .ok()
